@@ -1,0 +1,11 @@
+syntax: glob
+*.orig
+*.rej
+*.fasl
+*.out
+*~
+*.o
+tests/*.err
+
+syntax: regexp
+.*\#.*\#$
