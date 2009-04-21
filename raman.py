@@ -339,17 +339,17 @@ class RamanWavelets(BasicRaman):
         ylabel('A %d' % (N+1))
         ax_aver.draw()
 
-        figure()
-        hold(True)
-        plot(self.nu,self.pre_spectr,'k-')
-
-
+        figure(2000)
+        hold(False)
+        self.reconstr_axes = gca()
+        #hold(True)
+        #plot(self.nu,self.pre_spectr,'k-')
+        self.pl_spec_rec = plot(self.nu, self.new_spectr(coeffs), 'b-')
         
-        self.pl_spec_rec = plot(self.nu, self.new_spectr(coeffs), 'r-')
     
     def click(self, event, coeffs):
-        self.up_factor = 1.1
-        self.down_factor = 0.9
+        self.up_factor = 0.7**-0.25
+        self.down_factor = 0.7**0.25
         scale_factor = 1
         if defined(event.inaxes):
             curr_axes = event.inaxes
@@ -360,7 +360,7 @@ class RamanWavelets(BasicRaman):
                 scale_factor = self.up_factor
             elif event.button == 'down':
                 scale_factor = self.down_factor
-            print N,i, scale_factor
+            #print N,i, scale_factor
             
             coef_prev = coeffs[N - i]
             coeffs[N - i] = [k * scale_factor for k in coef_prev]
@@ -373,10 +373,11 @@ class RamanWavelets(BasicRaman):
             else:
                 y = ith_averages(coeffs, i, self.w)
                 #print y
-            print [min(y), max(y)]
             setp(plh, 'ydata', y, 'color', 'm')
             setp(curr_axes, 'ylim', [min(y), max(y)])
             curr_axes.draw()
+            figure(2000)
+            #plot(self.nu, self.new_spectr(coeffs))
             setp(self.pl_spec_rec, 'ydata', self.new_spectr(coeffs))
 
             
