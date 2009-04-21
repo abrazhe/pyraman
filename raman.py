@@ -73,6 +73,15 @@ def slots_from_cpoints2(cpoints):
                 curr_slot_dict['blue'].append(point)
     return slots
 
+
+def print_point(ev):
+    print "You clicked: %f, %f" % (ev.xdata, ev.ydata )
+
+
+
+
+
+
 class ColoredPoint:
     def __init__(self, color, x, plh):
         self.color = color
@@ -85,6 +94,7 @@ class ColoredPoint:
     def __cmp__(self, other):
         return cpoints_cmp(self, other)
         
+
 
 
 class Slot:
@@ -172,8 +182,7 @@ class SlotsCollection:
                 slot.set_order(order)
                 break
 
-
-class RamanCooker:
+class BasicRaman:
     def __init__(self, data = None, data2d=None):
         if provided(data):
             if verbose: print "Provided with data"
@@ -203,7 +212,9 @@ class RamanCooker:
     def take_data_2d(self,data):
         self.nu = data[:,0]
         self.pre_spectr = data[:,1]
-        
+
+
+class RamanCooker(BasicRaman):
     def start_cooking(self):
         self.slots_collection = SlotsCollection()
         self.plots = {}
@@ -257,6 +268,7 @@ class RamanCooker:
 
             figure();
             plot(self.new_nu, self.new_spectrum,'b-')
+            connect("button_press_event", print_point)
             figure(1000)
             
     def click(self, event):
@@ -270,6 +282,104 @@ class RamanCooker:
             plh = plot([self.nu[p]],[self.pre_spectr[p]], 'o' + color)
             self.slots_collection.push_cpoint(ColoredPoint(color, p, plh))
                     
+
+import pywt
+
+
+def ith_details(coeffs, i, w):
+    N = len(coeffs)
+    j = N - i
+    return pywt.waverec([None, coeffs[j]] + [None]*j, w)
+
+def ith_averages(coeffs, i, w):
+    N = len(coeffs)
+    print "N = ", N
+    j = N - i
+    return pywt.waverec([coeffs[j], None] + [None]*j, w)
+
+class RamanWavelets(BasicRaman):
+    def new_spectr(self, coeffs):
+        return pywt.waverec(coeffs, self.w)
+
+    def start(self, w = 'db1'):
+
+        self.w = pywt.Wavelet(w)
+
+        N = pywt.dwt_max_level(data_len = len(self.pre_spectr), 
+                          filter_len = self.w.dec_len)
+
+        print N
+
+        coeffs = pywt.wavedec(self.pre_spectr, w, level=N)
+        rec_d = []
+        
+
+        #figure(2000); #hold(True)
+        self.main_fig = figure(); 
+        ax_main = subplot(N+2,1,1)
+        ax_main.plot(self.nu, self.pre_spectr,'k-')
+        xlim(self.nu[0], self.nu[-1])
+
+        print len(rec_d)
+        
+        self.ax_details = {}
+
+        for i in xrange(1,N+1):
+            ax = subplot(N+2, 1, i+1)
+            y = ith_details(coeffs, i, w)
+            plh = ax.plot(y, 'g-')
+            connect('scroll_event', lambda event : self.click(event, coeffs) )
+            self.ax_details[ax] = [i, plh]
+            xlim(0, len(y)-1)
+            ylabel('D %d' % i)
+        
+        ax_aver = subplot(N+2,1,N+2)
+        plh = ax_aver.plot(ith_averages(coeffs,N+1, w), 'b-')
+        self.ax_details[ax_aver] = [N + 1, plh]
+        ylabel('A %d' % (N+1))
+        ax_aver.draw()
+
+        figure()
+        hold(True)
+        plot(self.nu,self.pre_spectr,'k-')
+
+
+        
+        self.pl_spec_rec = plot(self.nu, self.new_spectr(coeffs), 'r-')
+    
+    def click(self, event, coeffs):
+        self.up_factor = 1.1
+        self.down_factor = 0.9
+        scale_factor = 1
+        if defined(event.inaxes):
+            curr_axes = event.inaxes
+            N = len(coeffs)
+            i = self.ax_details[curr_axes][0]
+            plh = self.ax_details[curr_axes][1]
+            if event.button == 'up':
+                scale_factor = self.up_factor
+            elif event.button == 'down':
+                scale_factor = self.down_factor
+            print N,i, scale_factor
+            
+            coef_prev = coeffs[N - i]
+            coeffs[N - i] = [k * scale_factor for k in coef_prev]
+            #print array(coef_prev)/array(coeffs[N-i])
+            #print coef_prev
+            #print '----------------'
+            y = []
+            if i <= N:
+                y = ith_details(coeffs, i, self.w)
+            else:
+                y = ith_averages(coeffs, i, self.w)
+                #print y
+            print [min(y), max(y)]
+            setp(plh, 'ydata', y, 'color', 'm')
+            setp(curr_axes, 'ylim', [min(y), max(y)])
+            curr_axes.draw()
+            setp(self.pl_spec_rec, 'ydata', self.new_spectr(coeffs))
+
+            
 
 
 import random
