@@ -1,3 +1,5 @@
+# License: GPL
+# Copyright: Alexey Brazhe, 2008,2009
 from pylab import *
 
 verbose = 1
