@@ -119,7 +119,7 @@ class Slot:
         x2fit = nu[self.vector]
         data2fit = data[self.vector]
         pc = polyfit(x2fit, data2fit, self.order)
-        self.yfitted = polyval(pc, nu[self.start:self.stop])
+        self.yfitted = polyval(pc, nu[self.start:self.stop+1])
         return self.yfitted
 
     def in_regionp(self,x):
@@ -156,13 +156,11 @@ class SlotsCollection:
             return 0
     def last(self):
         if len(self.slots) > 0:
-            return self.slots[-1].stop
-        else: return -1
+            return self.slots[-1].stop+1
+        else: return None
 
     def apply(self, nu, data):
-        y_fits = []
-        for slot in self.slots:
-            y_fits.append(slot.fit(nu,data))
+        y_fits = [slot.fit(nu,data) for slot in self.slots]
         nufit = nu[self.first():self.last()]
         total_y_fit = [i for i in flatten(y_fits)]
         return [nufit, total_y_fit]
@@ -193,7 +191,7 @@ class BasicRaman:
 
         self.macophilf = False
         self.pointcolors = {1:'r', 2:'b', 3:'b'}
-
+        self.slots_collection = SlotsCollection()
         pass
     
     def take_data(self,nu,spectrum):
@@ -215,22 +213,57 @@ class BasicRaman:
 
 
 class RamanCooker(BasicRaman):
-    def start_cooking(self):
-        self.slots_collection = SlotsCollection()
+    def __init__(self):
+        BasicRaman.__init__(self)
         self.plots = {}
         self.events_handlers = {}
+    def clear_fits(self):
+        if self.plots.has_key('fits'):
+            setp(self.plots['fits'], 'data', (None, None), 'visible', False)
+    def cook(self, nu=None, spectrum=None,
+                      slots_collection = None):
+
+        if provided(slots_collection):
+            self.slots_collection = slots_collection
+            
         self.read_mouse_eventsp = True
+
+        if provided(nu): self.nu = nu
+        if provided(spectrum): self.pre_spectr = spectrum
+        
         self.new_nu, self.new_spectrum = None,None
 
-        figure(1000); hold(True)
+        figure(1000); hold(False);
         self.main_axes = gca()
-        main_plot = plot(self.nu, self.pre_spectr, 'k-')
-        self.events_handlers['mouse'] = connect('button_press_event', self.click)
-        self.events_handlers['keys'] = connect('key_press_event', self.type)
-        #self.plots['main'] = main_plot
+
+        self.clear_fits()
+
+        if self.plots.has_key('main'):
+            setp(self.plots['main'],
+                 'xdata',self.nu,
+                 'ydata', self.pre_spectr)
+            self.set_axis_lims()
+        else:
+            main_plot = plot(self.nu, self.pre_spectr, 'k-')
+            self.events_handlers['mouse'] = \
+                                          connect('button_press_event',
+                                                  self.click)
+            self.events_handlers['keys'] = connect('key_press_event', self.type)
+            self.plots['main'] = main_plot
+
+
+        hold(True); grid(True)
+        self.plot_cpoints()
+        
+
+    def plot_cpoints(self):
+        for p in self.slots_collection.points:
+            setp(p.plh, 'xdata', [self.nu[p.x]],
+                 'ydata', [self.pre_spectr[p.x]])
         
     def type(self, event):
-        print "you typed:", event.key
+        if verbose:
+            print "you typed:", event.key
 
         if event.key == 't':
             self.read_mouse_eventsp = not self.read_mouse_eventsp
@@ -257,8 +290,7 @@ class RamanCooker(BasicRaman):
                 self.plots['fits'] = plot(xfit, yfit-0.5*mean(self.pre_spectr), 'g--')
             else:
                 self.plots['fits'] = plot(xfit,yfit,'m--')
-                axis((self.nu[0], self.nu[-1],
-                      min(self.pre_spectr), max(self.pre_spectr)))
+                self.set_axis_lims()
 
             self.new_nu = xfit
             self.new_spectrum = self.pre_spectr[self.slots_collection.first():
@@ -270,10 +302,14 @@ class RamanCooker(BasicRaman):
             plot(self.new_nu, self.new_spectrum,'b-')
             connect("button_press_event", print_point)
             figure(1000)
-            
+
+    def set_axis_lims(self):
+        axis((self.nu[0], self.nu[-1],
+                      min(self.pre_spectr), max(self.pre_spectr)))
+
     def click(self, event):
         if defined(event.inaxes) and self.read_mouse_eventsp:
-            print "In the main axes?", event.inaxes == self.main_axes
+            #print "In the main axes?", event.inaxes == self.main_axes
             p = nearest_item_ind(self.nu, event.xdata)
             if verbose:
                 print "you clicked:", event.xdata, event.ydata
@@ -283,34 +319,47 @@ class RamanCooker(BasicRaman):
             self.slots_collection.push_cpoint(ColoredPoint(color, p, plh))
                     
 
-import pywt
+try:
+    import pywt
+except:
+    pass
 
 
-def ith_details(coeffs, i, w):
+def ith_details(coeffs, i, w, mode = 'cpd'):
     N = len(coeffs)
     j = N - i
     return pywt.waverec([None, coeffs[j]] + [None]*j, w)
 
-def ith_averages(coeffs, i, w):
+def ith_averages(coeffs, i, w, mode = 'cpd'):
     N = len(coeffs)
     print "N = ", N
     j = N - i
     return pywt.waverec([coeffs[j], None] + [None]*j, w)
 
+def simple_rec(a, d):
+    k = d + [a]
+    min_len = min(map(lambda x : len(x), k))
+    m = [x[:min_len] for x in k]
+    return reduce(lambda x,y: x+y, m)
+
 class RamanWavelets(BasicRaman):
     def new_spectr(self, coeffs):
         return pywt.waverec(coeffs, self.w)
+    def new_spectr2(self):
+        return simple_rec(self.a_rec, self.d_recs)
 
-    def start(self, w = 'db1'):
+    def start(self, w = 'db1', N = None, mode = 'cpd'):
+        
 
         self.w = pywt.Wavelet(w)
+        self.mode = mode
 
-        N = pywt.dwt_max_level(data_len = len(self.pre_spectr), 
-                          filter_len = self.w.dec_len)
-
+        if not defined(N):
+            N = pywt.dwt_max_level(data_len = len(self.pre_spectr), 
+                                   filter_len = self.w.dec_len)
         print N
 
-        coeffs = pywt.wavedec(self.pre_spectr, w, level=N)
+        coeffs = pywt.wavedec(self.pre_spectr, w, level=N, mode = mode)
         rec_d = []
         
 
@@ -320,32 +369,56 @@ class RamanWavelets(BasicRaman):
         ax_main.plot(self.nu, self.pre_spectr,'k-')
         xlim(self.nu[0], self.nu[-1])
 
+        self.ax_main = ax_main
+        
         print len(rec_d)
         
         self.ax_details = {}
+        
+        self.d_recs = []
+        self.a_rec = []
 
-        for i in xrange(1,N+1):
-            ax = subplot(N+2, 1, i+1)
-            y = ith_details(coeffs, i, w)
+        self.ca = []
+        self.cd = []
+
+        a = self.pre_spectr.copy()
+        for i in xrange(N):
+            (a,d) = pywt.dwt(a, w, mode)
+            self.ca = a
+            self.cd.append(d)
+
+        for i in xrange(0,N):
+            ax = subplot(N+2, 1, i+2)
+            #y = ith_details(coeffs, i, w, mode=mode)
+            coeff_list = [None, self.cd[i]] + [None]*i
+            y = pywt.waverec(coeff_list, w, mode)
+            self.d_recs.append(y)
             plh = ax.plot(y, 'g-')
-            connect('scroll_event', lambda event : self.click(event, coeffs) )
+            connect('scroll_event', lambda event : self.click(event, coeffs))
+            connect('button_press_event', lambda event : self.click(event, coeffs))
             self.ax_details[ax] = [i, plh]
             xlim(0, len(y)-1)
             ylabel('D %d' % i)
         
         ax_aver = subplot(N+2,1,N+2)
-        plh = ax_aver.plot(ith_averages(coeffs,N+1, w), 'b-')
-        self.ax_details[ax_aver] = [N + 1, plh]
-        ylabel('A %d' % (N+1))
+        
+        self.a_rec = pywt.waverec([a, None] + [None]*(N-1),
+                                  w, mode)
+        #plh = ax_aver.plot(ith_averages(coeffs,N+1, w, mode), 'b-')
+        plh = ax_aver.plot(self.a_rec, 'b-')
+        self.ax_details[ax_aver] = [N, plh]
+        ylabel('A %d' % N)
         ax_aver.draw()
 
-        figure(2000)
-        hold(False)
+        figure()
+        #hold(False)
         self.reconstr_axes = gca()
         #hold(True)
         #plot(self.nu,self.pre_spectr,'k-')
-        self.pl_spec_rec = plot(self.nu, self.new_spectr(coeffs), 'b-')
-        
+        #print "test len:", len(self.new_spectr2())
+        y = self.new_spectr2()
+        self.pl_spec_rec = plot(y, 'r-')
+        return self.a_rec, self.d_recs
     
     def click(self, event, coeffs):
         self.up_factor = 0.7**-0.25
@@ -353,32 +426,29 @@ class RamanWavelets(BasicRaman):
         scale_factor = 1
         if defined(event.inaxes):
             curr_axes = event.inaxes
-            N = len(coeffs)
+            N = len(self.cd)
             i = self.ax_details[curr_axes][0]
             plh = self.ax_details[curr_axes][1]
-            if event.button == 'up':
+            if event.button in ['up', 1]:
                 scale_factor = self.up_factor
-            elif event.button == 'down':
+            elif event.button in ['down', 2, 3]:
                 scale_factor = self.down_factor
             #print N,i, scale_factor
-            
-            coef_prev = coeffs[N - i]
-            coeffs[N - i] = [k * scale_factor for k in coef_prev]
-            #print array(coef_prev)/array(coeffs[N-i])
-            #print coef_prev
-            #print '----------------'
-            y = []
-            if i <= N:
-                y = ith_details(coeffs, i, self.w)
+                
+            if i < N:
+                y = [x*scale_factor for x in self.d_recs[i]]
+                self.d_recs[i] = y
             else:
-                y = ith_averages(coeffs, i, self.w)
-                #print y
+                y = [x*scale_factor for x in self.a_rec]
+                self.a_rec = y
+            
+            #print len(y)
             setp(plh, 'ydata', y, 'color', 'm')
             setp(curr_axes, 'ylim', [min(y), max(y)])
-            curr_axes.draw()
-            figure(2000)
-            #plot(self.nu, self.new_spectr(coeffs))
-            setp(self.pl_spec_rec, 'ydata', self.new_spectr(coeffs))
+            self.main_fig.canvas.draw()
+            #curr_axes.draw()
+            #plot(self.new_spectr2())
+            setp(self.pl_spec_rec, 'ydata', self.new_spectr2())
 
             
 
