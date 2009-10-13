@@ -121,7 +121,7 @@ class Slot:
         x2fit = nu[self.vector]
         data2fit = data[self.vector]
         pc = polyfit(x2fit, data2fit, self.order)
-        self.yfitted = polyval(pc, nu[self.start:self.stop+1])
+        self.yfitted = polyval(pc, nu[self.start:self.stop])
         return self.yfitted
 
     def in_regionp(self,x):
@@ -158,7 +158,7 @@ class SlotsCollection:
             return 0
     def last(self):
         if len(self.slots) > 0:
-            return self.slots[-1].stop+1
+            return self.slots[-1].stop
         else: return None
 
     def apply(self, nu, data):
