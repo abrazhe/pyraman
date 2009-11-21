@@ -6,9 +6,7 @@ verbose = 1
 
 def defined(obj):
     return obj is not None
-
-def provided(argument):
-    return defined(argument)
+provided = defined
 
 def best (scoref, lst):
     n,winner = 0, lst[0]
@@ -78,11 +76,6 @@ def slots_from_cpoints2(cpoints):
 
 def print_point(ev):
     print "You clicked: %f, %f" % (ev.xdata, ev.ydata )
-
-
-
-
-
 
 class ColoredPoint:
     def __init__(self, color, x, plh):
