@@ -202,7 +202,7 @@ class BasicRaman:
         self.nu = data[:,0]
         self.pre_spectr = data[:,1]
 
-def specload(fname, col = 2,  smooth=5):
+        def specload(fname, col = 2,  smooth=5):
     d = numpy.loadtxt(fname)[:,col-1]
     if smooth:
         d = movavg(d, smooth)
