@@ -178,23 +178,17 @@ class SlotsCollection:
                 break
 
 class BasicRaman:
-    def __init__(self, data = None, data2d=None):
-        if provided(data):
-            if verbose: print "Provided with data"
-            self.take_data(data[0], data[1])
-        if provided(data2d):
-            if verbose: print "Provided with data2d"
-            self.take_data_2d(data2d)
-
+    def __init__(self):
         self.macophilf = False
         self.pointcolors = {1:'r', 2:'b', 3:'b'}
         self.slots_collection = SlotsCollection()
         pass
     
     def take_data(self,nu,spectrum):
-        N = min(len(nu), len(spectrum))
-        self.pre_spectr = spectrum[:N]
-        self.nu = nu[:N]
+        if provided(nu) and provided(spectrum):
+            N = min(len(nu), len(spectrum))
+            self.pre_spectr = spectrum[:N]
+            self.nu = nu[:N]
 
     def take_from_files(self, nu_file, spectrum_file):
         nu = load(nu_file)
@@ -208,6 +202,11 @@ class BasicRaman:
         self.nu = data[:,0]
         self.pre_spectr = data[:,1]
 
+def specload(fname, col = 2,  smooth=5):
+    d = numpy.loadtxt(fname)[:,col-1]
+    if smooth:
+        d = movavg(d, smooth)
+    return d
 
 class RamanCooker(BasicRaman):
     def __init__(self):
@@ -217,17 +216,15 @@ class RamanCooker(BasicRaman):
     def clear_fits(self):
         if self.plots.has_key('fits'):
             setp(self.plots['fits'], 'data', (None, None), 'visible', False)
+
     def cook(self, nu=None, spectrum=None,
                       slots_collection = None):
 
         if provided(slots_collection):
             self.slots_collection = slots_collection
             
-        self.read_mouse_eventsp = True
 
-        if provided(nu): self.nu = nu
-        if provided(spectrum): self.pre_spectr = spectrum
-        
+        self.take_data(nu, spectrum)
         self.new_nu, self.new_spectrum = None,None
 
         figure(1000); hold(False);
