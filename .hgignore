@@ -3,6 +3,8 @@ syntax: glob
 *.rej
 *.fasl
 *.out
+dist
+MANIFEST
 *~
 *.o
 tests/*.err
