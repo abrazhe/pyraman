@@ -2,6 +2,8 @@
 # Copyright: Alexey Brazhe, 2008,2009
 from pylab import *
 
+load = numpy.loadtxt
+
 verbose = 1
 
 def defined(obj):
