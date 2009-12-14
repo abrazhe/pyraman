@@ -1,6 +1,7 @@
 # License: GPL
 # Copyright: Alexey Brazhe, 2008,2009
 from pylab import *
+import numpy
 
 load = numpy.loadtxt
 
@@ -45,7 +46,7 @@ def paired_regions_from_cpoints(cpoints):
              for pair in group(cpoints,2)
              if len(pair) > 1]
 
-def group(lst, n):
+def group_old(lst, n):
     if n == 0: return lst
     acc = []
     n = int(n)
@@ -53,6 +54,14 @@ def group(lst, n):
         for obj in arange(len(lst))[::n]:
             acc.append(lst[obj : obj+n])
     return acc
+
+from itertools import izip
+def group(seq, n):
+    """list(group(range(4),2)) -> [(0, 1), (2, 3)]
+group(seq,0) -> seq    
+    """
+    if n==0: return seq
+    return izip(*[iter(seq)]*n)
 
 
 def slots_from_cpoints2(cpoints):
@@ -143,6 +152,7 @@ class SlotsCollection:
         pass
     def push_cpoint(self, cpoint):
         self.points.append(cpoint)
+        # Do I really need to re-sort all points each time?
         if len(self.points) > 1:
             self.points.sort(cpoints_cmp)
             self.slots = slots_from_cpoints2(self.points)
@@ -202,7 +212,7 @@ class BasicRaman:
         self.nu = data[:,0]
         self.pre_spectr = data[:,1]
 
-        def specload(fname, col = 2,  smooth=5):
+def specload(fname, col = 2,  smooth=5):
     d = numpy.loadtxt(fname)[:,col-1]
     if smooth:
         d = movavg(d, smooth)
