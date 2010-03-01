@@ -32,28 +32,10 @@ def cpoints_cmp(one, other):
     elif diff > 0: return 1
     else: return 0
 
-def regions_from_cpoints(cpoints):
-    """Takes ordered list of coloured points and returnes
-    a list of regions
-    """
-    regions = []
-    for n, p in enumerate(cpoints[:-1]):
-        regions.append((p.x, cpoints[n+1].x))
-    return regions
-
 def paired_regions_from_cpoints(cpoints):
     return  [map(lambda p: p.x, pair)
              for pair in group(cpoints,2)
              if len(pair) > 1]
-
-def group_old(lst, n):
-    if n == 0: return lst
-    acc = []
-    n = int(n)
-    if lst:
-        for obj in arange(len(lst))[::n]:
-            acc.append(lst[obj : obj+n])
-    return acc
 
 from itertools import izip
 def group(seq, n):
@@ -100,9 +82,6 @@ class ColoredPoint:
     def __cmp__(self, other):
         return cpoints_cmp(self, other)
         
-
-
-
 class Slot:
     def __init__(self, slot_dict, order=3):
         self.order = order
@@ -153,6 +132,7 @@ class SlotsCollection:
     def push_cpoint(self, cpoint):
         self.points.append(cpoint)
         # Do I really need to re-sort all points each time?
+        # I do, because of set_order
         if len(self.points) > 1:
             self.points.sort(cpoints_cmp)
             self.slots = slots_from_cpoints2(self.points)
@@ -167,6 +147,7 @@ class SlotsCollection:
         else: return None
 
     def apply(self, nu, data):
+        self.slots = slots_from_cpoints2(self.points)
         y_fits = [slot.fit(nu,data) for slot in self.slots]
         nufit = nu[self.first():self.last()]
         total_y_fit = [i for i in flatten(y_fits)]
@@ -200,17 +181,11 @@ class BasicRaman:
             self.pre_spectr = spectrum[:N]
             self.nu = nu[:N]
 
-    def take_from_files(self, nu_file, spectrum_file):
-        nu = load(nu_file)
-        spectrum = load(spectrum_file)
-        self.take_data(nu, spectrum)
-
     def give_results(self):
         return self.new_nu,self.new_spectrum
         
     def take_data_2d(self,data):
-        self.nu = data[:,0]
-        self.pre_spectr = data[:,1]
+        self.take_data(data[:,0], data[:,1])
 
 def specload(fname, col = 2,  smooth=5):
     d = numpy.loadtxt(fname)[:,col-1]
@@ -222,6 +197,7 @@ class RamanCooker(BasicRaman):
     def __init__(self):
         BasicRaman.__init__(self)
         self.plots = {}
+        self.read_mouse_eventsp = True
         self.events_handlers = {}
     def clear_fits(self):
         if self.plots.has_key('fits'):
@@ -232,7 +208,6 @@ class RamanCooker(BasicRaman):
 
         if provided(slots_collection):
             self.slots_collection = slots_collection
-            
 
         self.take_data(nu, spectrum)
         self.new_nu, self.new_spectrum = None,None
@@ -262,7 +237,8 @@ class RamanCooker(BasicRaman):
 
     def plot_cpoints(self):
         for p in self.slots_collection.points:
-            setp(p.plh, 'xdata', [self.nu[p.x]],
+            setp(p.plh,
+                 'xdata', [self.nu[p.x]],
                  'ydata', [self.pre_spectr[p.x]])
         
     def type(self, event):
@@ -309,7 +285,7 @@ class RamanCooker(BasicRaman):
 
     def set_axis_lims(self):
         axis((self.nu[0], self.nu[-1],
-                      min(self.pre_spectr), max(self.pre_spectr)))
+              min(self.pre_spectr), max(self.pre_spectr)))
 
     def click(self, event):
         if defined(event.inaxes) and self.read_mouse_eventsp:
@@ -456,7 +432,7 @@ class RamanWavelets(BasicRaman):
 
             
 
-
+### Genetic alg. fitting for peaks. Not very useful
 import random
 def make_evolve(genotype,
                  mutate_gene_fn,
