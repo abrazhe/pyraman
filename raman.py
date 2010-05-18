@@ -147,7 +147,7 @@ class SlotsCollection:
         else: return None
 
     def apply(self, nu, data):
-        self.slots = slots_from_cpoints2(self.points)
+        #self.slots = slots_from_cpoints2(self.points)
         y_fits = [slot.fit(nu,data) for slot in self.slots]
         nufit = nu[self.first():self.last()]
         total_y_fit = [i for i in flatten(y_fits)]
