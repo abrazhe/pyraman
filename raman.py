@@ -1,9 +1,16 @@
 # License: GPL
 # Copyright: Alexey Brazhe, 2008,2009
-from pylab import *
-import numpy
+#import matplotlib as mpl
+#mpl.use('WXAgg')
 
-load = numpy.loadtxt
+from pylab import *
+
+import pylab as pl
+import numpy as np
+
+
+
+load = np.loadtxt
 
 verbose = 1
 
@@ -21,10 +28,38 @@ def min1(scoref, lst):
     return best(less, map(scoref, lst))
 
 def in_range(n, region):
-    return (n > region[0]) and (n < region[1])
+    return (n > region[0]) * (n < region[1])
 
 def nearest_item_ind(items, x, fn = lambda a: a):
     return min1(lambda p: abs(fn(p) - x), items)[0]
+
+# ---- Playing with splines
+from scipy.interpolate import splrep, splev
+from scipy.optimize import leastsq
+
+
+#from enthought.traits.api import *
+#from enthought.traits.ui.api import *
+
+#class FitPars(HasTraits):
+#    downsampling = Int(2)
+#    smoothing = CFloat(1e10)
+    
+
+def spl_residuals(p, xlocs,x,y,w):
+    """
+    Returns residuals between spline curve and data points
+    p -- 2N vector, first half is x coords, 2nd is y coords
+    """
+    err = y - spl_eval(p, xlocs,x,y)
+    return err*w
+
+def spl_eval(p, xlocs, x,y):
+    #xp,yp = np.split(p,2)
+    k = np.argsort(xlocs)
+    tck = splrep(xlocs[k],p[k])
+    return splev(x, tck)
+#---------------------------
 
 def cpoints_cmp(one, other):
     diff = one.x - other.x
@@ -168,6 +203,12 @@ class SlotsCollection:
                 slot.set_order(order)
                 break
 
+def specload(fname, col = 2,  smooth=5):
+    d = np.loadtxt(fname)[:,col-1]
+    if smooth:
+        d = movavg(d, smooth)
+    return d
+
 class BasicRaman:
     def __init__(self):
         self.macophilf = False
@@ -187,11 +228,6 @@ class BasicRaman:
     def take_data_2d(self,data):
         self.take_data(data[:,0], data[:,1])
 
-def specload(fname, col = 2,  smooth=5):
-    d = numpy.loadtxt(fname)[:,col-1]
-    if smooth:
-        d = movavg(d, smooth)
-    return d
 
 class RamanCooker(BasicRaman):
     def __init__(self):
@@ -202,6 +238,155 @@ class RamanCooker(BasicRaman):
     def clear_fits(self):
         if self.plots.has_key('fits'):
             setp(self.plots['fits'], 'data', (None, None), 'visible', False)
+
+       
+    def cook_splines(self, nu=None, spectrum=None):
+        if not hasattr(self, 'connected'):
+            self.connected = False
+        self.take_data(nu, spectrum)
+        self.new_nu, self.new_spectrum = None,None
+        self.axspl = pl.figure().add_subplot(111)
+        self.figspl = self.axspl.figure
+        self.knot_count = 0
+        self.span_count = 0
+        self.knots = {}
+        self.spans = {}
+        self.axspl.plot(self.nu, self.pre_spectr)
+        self.curr_span = None
+        self.pressed = None
+        self.plfit = self.axspl.plot([],[],'m--')[0]
+        self.shadecolor = (0.9,0.9,0.9)
+        self.spl_down = 1
+        self.spl_smooth = 1e11
+        self.spl_k= 3
+        self.smooth_hint = pl.text(1.0,1.1,
+                                   "Smoothing: %3.2e"% self.spl_smooth,
+                                   horizontalalignment = 'right',
+                                   verticalalignment = 'top',
+                                   transform = self.axspl.transAxes)
+        if not self.connected:
+            canvas = self.figspl.canvas
+            canvas.mpl_connect('button_press_event',self.onpress_spl)
+            canvas.mpl_connect('motion_notify_event',self.onmotion_spl)
+            canvas.mpl_connect('button_release_event',self.onrelease_spl)
+            canvas.mpl_connect('key_press_event',self.onkeypress_spl)
+            canvas.mpl_connect('scroll_event',self.onpress_spl)
+            self.connected = True
+        return self.axspl
+    def onkeypress_spl(self,event):
+        pass
+              
+    def onpress_spl(self, event):
+        tb = get_current_fig_manager().toolbar
+        if event.inaxes != self.axspl or tb.mode != '': return
+        if self.any_obj_contains(self.knots,event): return
+        x,y = event.xdata, event.ydata
+        axrange = self.axspl.get_xbound() + self.axspl.get_ybound()
+        if event.button is 1 :
+            pass
+        elif event.button is 3:
+            self.pressed = event.xdata,event.ydata
+            x0 = event.xdata
+            self.curr_span = pl.axvspan(x0,x0,
+                                        facecolor=self.shadecolor,alpha=0.9)
+            self.axspl.axis(axrange)
+            pass
+        elif event.button is 'up':
+            self.spl_smooth *= 1.1
+        elif event.button is 'down':
+            self.spl_smooth /= 1.1
+        self.smooth_hint.set_text("Smoothing: %3.2e"%self.spl_smooth)            
+        self.apply_spl2()
+        self.axspl.axis(axrange)
+        pl.draw()
+    def onmotion_spl(self,event):
+        if (self.pressed is None) or (event.inaxes != self.axspl):
+            return
+        x0 = self.pressed[0]
+        x = event.xdata
+        if self.curr_span:
+            self.curr_span.set_xy([[x0,0], [x0,1], [x,1], [x,0], [x0,0]])
+        pl.draw()
+
+    def onrelease_spl(self,event):
+        if (not self.curr_span) or (event.inaxes != self.axspl):
+            return
+        vert = self.curr_span.get_xy()
+        w = abs(vert[0][0] - vert[2][0])
+        if w>5:
+            label = self.span_count
+            self.span_count +=1
+            self.curr_span.set_label(label)
+            self.spans[label]  = Span(self.curr_span, self)
+        else:
+            self.curr_span.remove()
+        self.curr_span = None
+        self.apply_spl2()
+
+    def any_obj_contains(self,objects,event):
+        "Checks if event is contained by any ROI"
+        if len(objects) < 1 : return False
+        return reduce(lambda x,y: x or y,
+                      [o.obj.contains(event)[0]
+                       for o in objects.values()])
+
+    def get_weights(self):
+        nu = self.nu
+        weights = np.ones(len(nu))
+        mask_regs = [s.xspan() for s in self.spans.values()]
+        if len(mask_regs) > 0:
+            masked = reduce(lambda a,b:a+b,
+                            map(lambda x: in_range(nu,x), mask_regs))
+            weights -= masked*(1-1e-6)
+        return weights
+
+    def get_knots(self):
+        pairs =  array([k.get_xy() for k in self.knots.values()])
+        k = argsort(pairs[:,0])
+        return pairs[k,:]
+
+    def knots2pars(self, knots):
+        x0 = np.array(knots)
+        return x0[:,1]
+        #return np.concatenate((x0[:,0], x0[:,1]))
+
+    def pars2knots(self,pars):
+        print pars
+        #x,y = np.split(array(pars),2)
+        x = [k.get_xy()[0] for k in self.knots.values()]
+        return zip(x,pars)
+        
+    def apply_spl2(self,show=False):
+        nu,sp = self.nu, self.pre_spectr
+        w = self.get_weights()
+        nux,spx = nu[w>0.5], sp[w>0.5]
+        d = self.spl_down
+        tck = splrep(nux[::d],spx[::d],s=self.spl_smooth,k=self.spl_k)
+        sp_fit = splev(nu, tck)
+        self.plfit.set_data(nu, sp_fit)
+        pl.draw()
+        if show:
+            newax = pl.figure().add_subplot(111)
+            newax.plot(nu, sp-sp_fit)
+    def apply_spl(self):
+        nu = self.nu
+        sp = self.pre_spectr
+        knots = self.get_knots()
+        weights = self.get_weights()
+        p0 = self.knots2pars(knots)
+        xlocs = array(knots)[:,0]
+        p1,_ = leastsq(spl_residuals, p0, args=(xlocs, nu,sp,weights))
+        new_knots = self.pars2knots(p1)
+        new_sp = spl_eval(p1,xlocs,nu,sp)
+        self.plfit.set_data(nu, new_sp) #TODO: restore axis bounds
+        for j,knot in enumerate(self.knots.values()):
+            knot.set_xy(new_knots[j])
+        pl.draw()
+        figure();
+        plot(nu, sp-new_sp)
+        return new_knots
+        
+                        
 
     def cook(self, nu=None, spectrum=None,
                       slots_collection = None):
@@ -299,6 +484,140 @@ class RamanCooker(BasicRaman):
             self.slots_collection.push_cpoint(ColoredPoint(color, p, plh))
                     
 
+# --- ROIS
+
+class DraggableObj:
+    verbose = True
+    def __init__(self, obj, parent,):
+        self.obj = obj
+        self.parent = parent
+        self.connect()
+        self.pressed = None
+        self.tag = obj.get_label()
+
+    def redraw(self):
+        self.obj.axes.figure.canvas.draw()
+
+    def event_ok(self, event, should_contain=False):
+        containsp = True
+        if should_contain:
+            containsp, _ = self.obj.contains(event)
+        return event.inaxes == self.obj.axes and \
+               containsp and \
+               get_current_fig_manager().toolbar.mode ==''
+
+    def connect(self):
+        "connect all the needed events"
+        cf = self.obj.axes.figure.canvas.mpl_connect
+        self.cid = {
+            'press': cf('button_press_event', self.on_press),
+            'release': cf('button_release_event', self.on_release),
+            'motion': cf('motion_notify_event', self.on_motion),
+            'scroll': cf('scroll_event', self.on_scroll),
+            'type': cf('key_press_event', self.on_type)
+            }
+    def on_motion(self, event):
+        if not (self.event_ok(event, False) and self.pressed):
+            return
+        p = event.xdata,event.ydata
+        self.move(p)
+        self.redraw()
+
+    def on_release(self, event):
+        if not self.event_ok(event):
+            return
+        self.pressed = None
+        self.redraw()
+
+    def on_scroll(self, event): pass
+
+    def on_type(self, event): pass
+    
+    def on_press(self, event): pass
+
+    def disconnect(self):
+        map(self.obj.axes.figure.canvas.mpl_disconnect,
+            self.cid.values())
+    def get_color(self):
+        return self.obj.get_facecolor()
+
+class Span(DraggableObj):
+    def on_press(self, event):
+        if not self.event_ok(event, True): return
+        #x0,y0 = self.obj.get_xdata(), self.obj.get_ydata()
+        if event.button is 1:
+            pass
+        #    self.pressed = event.xdata, event.ydata, x0, y0
+        elif event.button is 2:
+            pass
+          
+        elif event.button is 3:
+            p = self.parent.spans.pop(self.tag)
+            self.obj.remove()
+            self.disconnect()
+            self.redraw()
+    def xspan(self):
+        vert = self.obj.get_xy()
+        l,r = vert[0][0], vert[2][0]
+        return min(l,r), max(l,r)
+
+class KnotPoint(DraggableObj):
+    "Draggable Point"
+    step = 1
+    def on_scroll(self, event):
+        pass
+        if not self.event_ok(event, True): return
+        r = self.obj.get_radius()
+        if event.button in ['up']:
+            self.obj.set_radius(r+self.step)
+        else:
+            self.obj.set_radius(max(0.1,r-self.step))
+        self.redraw()
+        return
+
+                                     
+    def on_press(self, event):
+        if not self.event_ok(event, True): return
+        x0,y0 = self.obj.get_xdata(), self.obj.get_ydata()
+        if event.button is 1:
+            self.pressed = event.xdata, event.ydata, x0, y0
+        elif event.button is 2:
+            pass
+            
+        elif event.button is 3:
+            p = self.parent.knots.pop(self.tag)
+            self.obj.remove()
+            self.disconnect()
+            self.redraw()
+
+    def move(self, p):
+        "Move the ROI when the mouse is pressed over it"
+        xp,yp, x0, y0 = self.pressed
+        dx = p[0] - xp
+        dy = p[1] - yp
+        #x0, y0 = self.obj.get_xdata(), self.obj.get_ydata()
+        self.obj.set_data(x0+dx, y0+dy)
+        self.redraw()
+
+    def set_xy(self,(x,y)):
+        self.obj.set_data([x],[y])
+        self.redraw()
+        
+    def get_xy(self):
+        return self.obj.get_xdata()[0], self.obj.get_ydata()[0]
+
+    def to_struct(self):
+        c = self.obj
+        return {'func' : circle_from_struct,
+                'center': c.center,
+                'radius': c.radius,
+                'alpha': c.get_alpha(),
+                'label': c.get_label(),
+                'color': c.get_facecolor(),}
+
+
+
+# ----- Playing with wavelets 
 try:
     import pywt
 except:
