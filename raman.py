@@ -1,5 +1,9 @@
+# License: GPL
+# Copyright: Alexey Brazhe, 2010
+
 import numpy as np
 import pylab as pl
+import renishaw as rshaw
 
 from scipy.interpolate import splrep, splev
 from scipy.optimize import leastsq
@@ -22,6 +26,17 @@ import pickle
 
 class RamanCooker():
     def cook(self, nu, spectrum, s = 200, xspans = []):
+        """
+        UI for removing baseline with splines,
+        
+        Inputs:
+        -------
+        - nu : values for wavelength shift
+        - spectrum: intensity values
+        - s : spline smoothing parameter(200 by default)
+        - xspans: Spans (list of pairs of left,right nu values )
+                  to exclude from fitting (empty list by default)
+        """
         #if not hasattr(self, 'connected'):
         #    self.connected = False
         self.connected = False
@@ -38,7 +53,7 @@ class RamanCooker():
         self.plfit = self.axspl.plot([],[],'m--')[0]
         self.spankw = {'facecolor':(0.9,0.9,0.9), 'alpha':0.9}
         self.load_recipe({'s':s, 'xspans':xspans})
-        self.update_smooth_hint(True)
+        #self.update_smooth_hint(True)
         if not self.connected:
             canvas = self.figspl.canvas
             canvas.mpl_connect('button_press_event',self.onpress_spl)
@@ -49,6 +64,8 @@ class RamanCooker():
             self.connected = True
         return self.axspl
     def update_smooth_hint(self,renewp=False):
+        print "Renewp: ", renewp
+        print "Hasattr: ", hasattr(self, 'smooth_hint')
         if (not hasattr(self, 'smooth_hint')) or renewp:
             self.smooth_hint = pl.text(1.0,1.1,
                                        "Smoothing: %3.2e"% self.spl_smooth,
