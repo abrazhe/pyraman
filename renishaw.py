@@ -30,12 +30,26 @@ def process_image(arr, fn):
             out[r,c] = fn(arr[r,c])
     return out
 
-def inspect_image(arr, nu, fn = range_rms):
+def range_sum(arr, nu, nurange):
+    "Sum intensities in the given nu range"
+    return process_image(arr, lambda x: np.sum(x[in_range(nu,nurange)]))
+
+def range_rms(arr, nu, nurange):
+    "RMS intensities in the given nu range"
+    return process_image(arr, lambda x: pl.rms_flat(x[in_range(nu,nurange)]))
+    
+
+
+def inspect_image(arr, nu, fn = range_rms, nuint=None,
+                  **kwargs):
     "Inspect an image: show spectra for a pixel mouse hovers on"
     fh  = pl.figure();
     ax2 = pl.subplot(122);
     plh = pl.plot(nu, arr[0,0], 'k-')[0]
     pl.axis((nu[0], nu[-1], arr.min(), arr.max()))
+
+    if nuint is None:
+        nuint = (nu.min(), nu.max())
 
     def _on_hover(event):
         if event.inaxes == ax1:
@@ -45,8 +59,7 @@ def inspect_image(arr, nu, fn = range_rms):
             fh.canvas.draw()
             pass
     ax1 = pl.subplot(121);
-    pl.imshow(fn(arr, nu, (nu.min(), nu.max())),
-              aspect='equal', interpolation='nearest')
+    pl.imshow(fn(arr, nu, nuint), aspect='equal', **kwargs)
     fh.canvas.mpl_connect('motion_notify_event', _on_hover)
 
 def in_range(vec, range):
