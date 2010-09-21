@@ -21,6 +21,35 @@ def unique_tag(tags, max_tries = 1e4):
 def in_range(n, region):
     return (n > region[0]) * (n < region[1])
 
+def ind_to_val(ind, vrange, nsteps, dv=None):
+    if dv is None: dv = (vrange[1] - vrange[0])/nsteps
+    return vrange[0] + ind*dv
+
+def val_to_ind(val, vrange, nsteps, dv=None):
+    if dv is None: dv = (vrange[1] - vrange[0])/nsteps
+    return (val-vrange[0])/dv
+
+
+def locextr(v, x = None, mode = 1, **kwargs):
+   "Finds local maxima when mode = 1, local minima when mode = -1"
+   res = 0.05
+   if x is None:
+       x = np.arange(len(v))
+       xfit = np.arange(0,len(v), res)
+   else:
+       xfit = np.arange(x[0], x[-1], res)
+   tck = splrep(x, v, **kwargs)
+   vals = splev(xfit, tck)
+   dersign = mode*np.sign(splev(xfit, tck, der=1))
+   extrema = dersign[:-1] - dersign[1:] > 1.5
+   return xfit[extrema], vals[extrema]
+
+
+def loc_max_pos(v):
+    print len(v)
+    return [i for i in xrange(1,len(v)-1)
+            if (v[i] >= v[i-1]) and (v[i] > v[i+1])]
+
 
 import pickle
 
@@ -102,6 +131,19 @@ class RamanCooker():
         self.apply_spl2()
         self.axspl.axis(axrange)
         self.redraw()
+    def onpress_peaknotifier(self, event, ax, spectrum):
+        tb = pl.get_current_fig_manager().toolbar
+        if event.inaxes != ax or tb.mode != '': return
+        x,y = event.xdata, event.ydata
+        max_pos, max_vals = locextr(spectrum, self.nu)
+        j = np.argmin(abs(max_pos - x))
+        peak_x, peak_y = max_pos[j], max_vals[j]
+        print 'you pressed: %3.3f, %3.3f'%(x,y)
+        print 'nearest peak: %3.3f, %3.3f'%(peak_x, peak_y)
+        ax.plot(peak_x, peak_y, 'ro', alpha=0.5)
+        ax.text(peak_x, peak_y, '%3.3f, %3.3f'%(peak_x, peak_y), size='x-small')
+        pl.draw()
+
     def onmotion_spl(self,event):
         if (self.pressed is None) or (event.inaxes != self.axspl):
             return
@@ -154,6 +196,9 @@ class RamanCooker():
         if show:
             newax = pl.figure().add_subplot(111)
             newax.plot(nu, diff)
+            canvas = newax.figure.canvas
+            canvas.mpl_connect('button_press_event',
+                               lambda e: self.onpress_peaknotifier(e,newax,diff))
         return
     def export_recipe(self, out=None):
         rec =  {'s': self.spl_smooth,
@@ -187,9 +232,6 @@ class RamanCooker():
             return sp_fit, sp - sp_fit
         else:
             return sp-sp_fit
-        
-    
-
     def export_xspans(self):
         return [s.xspan() for s in self.spans.values()]
     def load_spans(self, xspans):
