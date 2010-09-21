@@ -131,18 +131,21 @@ class RamanCooker():
         self.apply_spl2()
         self.axspl.axis(axrange)
         self.redraw()
-    def onpress_peaknotifier(self, event, ax, spectrum):
+        
+    def onpress_peaknotifier(self, event, ax, spectrum, coll):
         tb = pl.get_current_fig_manager().toolbar
         if event.inaxes != ax or tb.mode != '': return
+        if event.button != 1 : return
+        if self.any_obj_contains(coll, event) : return
         x,y = event.xdata, event.ydata
         max_pos, max_vals = locextr(spectrum, self.nu)
         j = np.argmin(abs(max_pos - x))
         peak_x, peak_y = max_pos[j], max_vals[j]
-        #print 'you pressed: %3.3f, %3.3f'%(x,y)
-        #print 'nearest peak: %3.3f, %3.3f'%(peak_x, peak_y)
-        print ' '.join(['%3.3f'%v for v in (x, y, peak_x, peak_y)])
-        ax.plot(peak_x, peak_y, 'ro', alpha=0.5)
-        ax.text(peak_x, peak_y, '%3.3f, %3.3f'%(peak_x, peak_y), size='x-small')
+        #print ' '.join(['%3.3f'%v for v in (x, y, peak_x, peak_y)])
+        label = unique_tag(coll.keys())
+        lp =ax.plot(peak_x, peak_y, 'ro', alpha=0.5, label=label)[0]
+        coll[label] = LabeledPoint(lp, coll)
+        #ax.text(peak_x, peak_y, '%3.3f, %3.3f'%(peak_x, peak_y), size='x-small')
         pl.draw()
 
     def onmotion_spl(self,event):
@@ -161,7 +164,7 @@ class RamanCooker():
         w = abs(vert[0][0] - vert[2][0])
         if w>5:
             label = self.curr_span.get_label()
-            self.spans[label]  = Span(self.curr_span, self)
+            self.spans[label]  = Span(self.curr_span, self.spans)
         else:
             self.curr_span.remove()
         self.curr_span = None
@@ -190,6 +193,11 @@ class RamanCooker():
         return weights
    
     def apply_spl2(self,show=False):
+        peak_points = {}
+        def print_coll(event):
+            if event.key == 'e':
+                for lp in peak_points.values():
+                    print '%3.3f, %3.3f' % lp.get_xy()
         nu,sp = self.nu, self.sp
         sp_fit, diff = self.process(nu, sp, 'full')
         self.plfit.set_data(nu, sp_fit)
@@ -199,7 +207,10 @@ class RamanCooker():
             newax.plot(nu, diff)
             canvas = newax.figure.canvas
             canvas.mpl_connect('button_press_event',
-                               lambda e: self.onpress_peaknotifier(e,newax,diff))
+                               lambda e: self.onpress_peaknotifier(e,newax,diff,peak_points))
+            canvas.mpl_connect('key_press_event', print_coll)
+                               
+            
         return
     def export_recipe(self, out=None):
         rec =  {'s': self.spl_smooth,
@@ -239,7 +250,7 @@ class RamanCooker():
         for xsp in xspans:
             newspan = self.addspan(xsp)
             label = newspan.get_label()
-            self.spans[label] = Span(newspan, self)
+            self.spans[label] = Span(newspan, self.spans)
         self.apply_spl2()
         
 
@@ -247,9 +258,9 @@ class RamanCooker():
 
 class DraggableObj:
     verbose = True
-    def __init__(self, obj, parent):
+    def __init__(self, obj, coll):
+        self.coll = coll
         self.obj = obj
-        self.parent = parent
         self.connect()
         self.pressed = None
         self.tag = obj.get_label()
@@ -303,7 +314,7 @@ class Span(DraggableObj):
             pass
           
         elif event.button is 3:
-            p = self.parent.spans.pop(self.tag)
+            p = self.coll.pop(self.tag)
             self.obj.remove()
             self.disconnect()
             self.redraw()
@@ -311,3 +322,48 @@ class Span(DraggableObj):
         vert = self.obj.get_xy()
         l,r = vert[0][0], vert[2][0]
         return min(l,r), max(l,r)
+
+class LabeledPoint(DraggableObj):
+    "Labeled Point"
+    def __init__(self, obj, coll):
+        DraggableObj.__init__(self, obj, coll)
+        x,y = self.get_xy()
+        self.textlabel = obj.axes.text(x,y,"%3.3f, %3.3f"%(x,y))
+    def redraw(self):
+        xy = self.get_xy()
+        self.textlabel.set_position(xy)
+        self.textlabel.set_text("%3.3f, %3.3f"%xy)
+        DraggableObj.redraw(self)
+
+                              
+    def on_press(self, event):
+        if not self.event_ok(event, True): return
+        x0,y0 = self.obj.get_xdata(), self.obj.get_ydata()
+        if event.button is 1:
+            self.pressed = event.xdata, event.ydata, x0, y0
+        elif event.button is 2:
+            pass
+        elif event.button is 3:
+            p = self.coll.pop(self.tag)
+            self.textlabel.remove()
+            self.obj.remove()
+            self.disconnect()
+            self.redraw()
+
+    def move(self, p):
+        "Move the ROI when the mouse is pressed over it"
+        xp,yp, x0, y0 = self.pressed
+        dx = p[0] - xp
+        dy = p[1] - yp
+        #x0, y0 = self.obj.get_xdata(), self.obj.get_ydata()
+        self.obj.set_data(x0+dx, y0+dy)
+        self.redraw()
+
+    def set_xy(self,(x,y)):
+        self.obj.set_data([x],[y])
+        self.redraw()
+        
+    def get_xy(self):
+        return self.obj.get_xdata()[0], self.obj.get_ydata()[0]
+
+
