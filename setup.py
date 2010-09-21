@@ -17,7 +17,7 @@ setup(name='pyraman',
       version='0.2.2',
       description = 'Lib to process Raman spectra in pylab',
       author = 'Alexey Brazhe',
-      py_modules = ['raman', 'renishaw'],
+      py_modules = ['raman', 'renishaw', 'oldraman'],
       classifiers=classifiers,
       )
 

@@ -64,8 +64,8 @@ class RamanCooker():
             self.connected = True
         return self.axspl
     def update_smooth_hint(self,renewp=False):
-        print "Renewp: ", renewp
-        print "Hasattr: ", hasattr(self, 'smooth_hint')
+        #print "Renewp: ", renewp
+        #print "Hasattr: ", hasattr(self, 'smooth_hint')
         if (not hasattr(self, 'smooth_hint')) or renewp:
             self.smooth_hint = pl.text(1.0,1.1,
                                        "Smoothing: %3.2e"% self.spl_smooth,
