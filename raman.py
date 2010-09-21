@@ -140,7 +140,7 @@ class RamanCooker():
         peak_x, peak_y = max_pos[j], max_vals[j]
         #print 'you pressed: %3.3f, %3.3f'%(x,y)
         #print 'nearest peak: %3.3f, %3.3f'%(peak_x, peak_y)
-        print '\t'.join(['%3.3f'%v for v in (x,y,peak_x, peak_y)])
+        print ' '.join(['%3.3f'%v for v in (x, y, peak_x, peak_y)])
         ax.plot(peak_x, peak_y, 'ro', alpha=0.5)
         ax.text(peak_x, peak_y, '%3.3f, %3.3f'%(peak_x, peak_y), size='x-small')
         pl.draw()
