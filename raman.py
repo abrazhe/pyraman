@@ -205,7 +205,7 @@ class RamanCooker():
         if show:
             newax = pl.figure().add_subplot(111)
             newax.plot(nu, diff)
-            newax.title("Click on peaks to select, press 'e' to export selected...")
+            newax.set_title("Click on peaks to select, press 'e' to export selected...")
             canvas = newax.figure.canvas
             canvas.mpl_connect('button_press_event',
                                lambda e: self.onpress_peaknotifier(e,newax,diff,peak_points))
