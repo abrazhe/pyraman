@@ -196,7 +196,8 @@ class RamanCooker():
         peak_points = {}
         def print_coll(event):
             if event.key == 'e':
-                for lp in peak_points.values():
+                for lp in sorted(peak_points.values(),
+                                 key=lambda x:x[0]):
                     print '%3.3f, %3.3f' % lp.get_xy()
         nu,sp = self.nu, self.sp
         sp_fit, diff = self.process(nu, sp, 'full')
