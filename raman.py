@@ -182,8 +182,7 @@ class RamanCooker():
                       [o.obj.contains(event)[0]
                        for o in objects.values()])
 
-    def get_weights(self):
-        nu = self.nu
+    def get_weights(self, nu):
         weights = np.ones(len(nu))
         mask_regs = [s.xspan() for s in self.spans.values()]
         if len(mask_regs) > 0:
@@ -237,7 +236,7 @@ class RamanCooker():
         self.load_spans(rec['xspans'])
         
     def process(self, nu, sp, ret = None):
-        w = self.get_weights()
+        w = self.get_weights(nu)
         nux,spx = nu[w>0.5], sp[w>0.5]
         spsum = spx.sum()
         tck = splrep(nux,spx,s=self.spl_smooth*spsum,k=self.spl_k)
