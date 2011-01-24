@@ -86,6 +86,8 @@ def inspect_image(arr, nu,
             fh.canvas.draw()
             pass
     def _on_press(event):
+        if (event.inaxes != ax1):
+            return 
         hoverp[0] = toggle(hoverp[0])
         if not hoverp[1]:
             xh = ax1.axhline(event.ydata)
