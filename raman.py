@@ -44,6 +44,47 @@ def locextr(v, x = None, mode = 1, **kwargs):
    extrema = dersign[:-1] - dersign[1:] > 1.5
    return xfit[extrema], vals[extrema]
 
+def any_obj_contains(objects, event):
+    "Checks if event is contained by any ROI"
+    if len(objects) < 1 : return False
+    return reduce(lambda x,y: x or y,
+                  [o.obj.contains(event)[0]
+                   for o in objects.values()])
+
+
+def onpress_peaknotifier(event, ax, x,y, coll):
+    tb = pl.get_current_fig_manager().toolbar
+    if event.inaxes != ax or tb.mode != '': return
+    if event.button != 1 : return
+    if any_obj_contains(coll, event) : return
+    ex,ey = event.xdata, event.ydata
+    max_pos, max_vals = locextr(y, x)
+    j = np.argmin(abs(max_pos - ex))
+    peak_x, peak_y = max_pos[j], max_vals[j]
+    #print ' '.join(['%3.3f'%v for v in (x, y, peak_x, peak_y)])
+    label = unique_tag(coll.keys())
+    lp =ax.plot(peak_x, peak_y, 'ro', alpha=0.5, label=label)[0]
+    coll[label] = LabeledPoint(lp, coll)
+    #ax.text(peak_x, peak_y, '%3.3f, %3.3f'%(peak_x, peak_y), size='x-small')
+    pl.draw()
+        
+
+def plot_with_peaks(x, y, **kwargs):
+    peak_points = {}
+    def print_coll(event):
+        if event.key == 'e':
+            for xy in sorted([lp.get_xy() for lp in peak_points.values()],
+                             key=lambda x:x[0]):
+                print '%3.3f, %3.3f' % xy
+        return
+    newax = pl.figure().add_subplot(111)
+    newax.plot(x,y)
+    newax.set_title("Click on peaks to select, press 'e' to export selected...")
+    canvas = newax.figure.canvas
+    canvas.mpl_connect('button_press_event',
+                       lambda e: onpress_peaknotifier(e,newax,x,y,peak_points))
+    canvas.mpl_connect('key_press_event', print_coll)
+    return peak_points
 
 def loc_max_pos(v):
     print len(v)
@@ -92,6 +133,28 @@ class RamanCooker():
             canvas.mpl_connect('scroll_event',self.onpress_spl)
             self.connected = True
         return self.axspl
+    def cook_knots(self, nu, spectrum):
+        self.connected = False
+        L = min(len(nu), len(spectrum))
+        self.nu = nu[:L]
+        self.sp = spectrum[:L]
+        self.axspl = pl.figure().add_subplot(111)
+        self.figspl = self.axspl.figure
+        self.nuspan = 5.0
+        self.knots = {}
+        self.axspl.plot(self.nu, self.sp)
+        self.pressed = None
+        self.plfit = self.axspl.plot([],[],'m--')[0]
+        if not self.connected:
+            canvas = self.figspl.canvas
+            canvas.mpl_connect('button_press_event',self.onpress_spl_knots)
+            #canvas.mpl_connect('motion_notify_event',self.onmotion_spl)
+            #canvas.mpl_connect('button_release_event',self.onrelease_spl)
+            canvas.mpl_connect('key_press_event',self.onkeypress_spl_knots)
+            #canvas.mpl_connect('scroll_event',self.onpress_spl)
+            self.connected = True
+        return self.axspl
+ 
     def update_smooth_hint(self,renewp=False):
         #print "Renewp: ", renewp
         #print "Hasattr: ", hasattr(self, 'smooth_hint')
@@ -104,12 +167,17 @@ class RamanCooker():
         else:
             self.smooth_hint.set_text("Smoothing: %3.2e"%self.spl_smooth)            
             
-    def redraw(self):
-        self.update_smooth_hint()
+    def redraw(self, smooth_hint = True):
+        if smooth_hint:
+            self.update_smooth_hint()
         self.figspl.canvas.draw()
     def onkeypress_spl(self,event):
         if event.key == 'a':
             self.apply_spl2(show=True)
+        pass
+    def onkeypress_spl_knots(self,event):
+        if event.key == 'a':
+            self.apply_spl_knots(show=True)
         pass
     def onpress_spl(self, event):
         tb = pl.get_current_fig_manager().toolbar
@@ -131,23 +199,28 @@ class RamanCooker():
         self.apply_spl2()
         self.axspl.axis(axrange)
         self.redraw()
-        
-    def onpress_peaknotifier(self, event, ax, spectrum, coll):
+    def onpress_spl_knots(self, event):
         tb = pl.get_current_fig_manager().toolbar
-        if event.inaxes != ax or tb.mode != '': return
-        if event.button != 1 : return
-        if self.any_obj_contains(coll, event) : return
+        if event.inaxes != self.axspl or tb.mode != '': return
+        if any_obj_contains(self.knots, event) : return
         x,y = event.xdata, event.ydata
-        max_pos, max_vals = locextr(spectrum, self.nu)
-        j = np.argmin(abs(max_pos - x))
-        peak_x, peak_y = max_pos[j], max_vals[j]
-        #print ' '.join(['%3.3f'%v for v in (x, y, peak_x, peak_y)])
-        label = unique_tag(coll.keys())
-        lp =ax.plot(peak_x, peak_y, 'ro', alpha=0.5, label=label)[0]
-        coll[label] = LabeledPoint(lp, coll)
-        #ax.text(peak_x, peak_y, '%3.3f, %3.3f'%(peak_x, peak_y), size='x-small')
-        pl.draw()
-
+        axrange = self.axspl.get_xbound() + self.axspl.get_ybound()
+        if event.button is 1:
+            self.pressed = x,y
+            x0 = event.xdata
+            label = unique_tag(self.knots.keys())
+            nux = in_range(self.nu, (x0-self.nuspan, x0+self.nuspan))
+            if np.any(nux):
+                y = np.mean(self.sp[nux])
+                lp =self.axspl.plot(x, y, 'ro', alpha=0.5, label=label)[0]
+                self.knots[label] = DraggablePoint(lp, self.knots)
+                self.axspl.axis(axrange)
+                pl.draw()
+            pass
+        self.apply_spl_knots()
+        self.axspl.axis(axrange)
+        self.redraw(smooth_hint = False)
+        
     def onmotion_spl(self,event):
         if (self.pressed is None) or (event.inaxes != self.axspl):
             return
@@ -175,12 +248,6 @@ class RamanCooker():
         spanh.set_label(label)
         return spanh
 
-    def any_obj_contains(self,objects,event):
-        "Checks if event is contained by any ROI"
-        if len(objects) < 1 : return False
-        return reduce(lambda x,y: x or y,
-                      [o.obj.contains(event)[0]
-                       for o in objects.values()])
 
     def get_weights(self, nu):
         weights = np.ones(len(nu))
@@ -192,27 +259,43 @@ class RamanCooker():
         return weights
    
     def apply_spl2(self,show=False):
-        peak_points = {}
-        def print_coll(event):
-            if event.key == 'e':
-                for xy in sorted([lp.get_xy() for lp in peak_points.values()],
-                                 key=lambda x:x[0]):
-                    print '%3.3f, %3.3f' % xy
         nu,sp = self.nu, self.sp
         sp_fit, diff = self.process(nu, sp, 'full')
         self.plfit.set_data(nu, sp_fit)
         self.redraw()
         if show:
-            newax = pl.figure().add_subplot(111)
-            newax.plot(nu, diff)
-            newax.set_title("Click on peaks to select, press 'e' to export selected...")
-            canvas = newax.figure.canvas
-            canvas.mpl_connect('button_press_event',
-                               lambda e: self.onpress_peaknotifier(e,newax,diff,peak_points))
-            canvas.mpl_connect('key_press_event', print_coll)
-                               
-            
+            plot_with_peaks(nu, diff)
         return
+
+    def knots2pars(self, nu = None, sp = None):
+        xlocs = sorted([k.get_xy()[0] for k in self.knots.values()])
+        if nu is None : nu = self.nu
+        if sp is None : sp = self.sp
+        self.nuspan = 5.0
+        nuxs = [in_range(nu, (x-self.nuspan, x + self.nuspan)) for x in xlocs]
+        y = [np.mean(sp[nx]) for nx in nuxs]
+        return xlocs,y
+
+    def update_knots(self):
+        for knot in self.knots.values():
+            x,y = knot.get_xy()
+            nux = in_range(self.nu, (x- self.nuspan, x+self.nuspan))
+            if np.any(nux):
+                y = np.mean(self.sp[nux])
+            knot.set_xy((x,y))
+            self.redraw(smooth_hint=False)
+    
+    def apply_spl_knots(self, show=False):
+        nu,sp = self.nu, self.sp
+        self.update_knots()
+        if len(self.knots.values()) > 5:
+            sp_fit, diff = self.process_knots(nu, sp, 'full')
+            self.plfit.set_data(nu, sp_fit)
+            self.redraw(smooth_hint = False)
+            if show:
+                plot_with_peaks(nu, diff)
+
+
     def export_recipe(self, out=None):
         rec =  {'s': self.spl_smooth,
                 'xspans':self.export_xspans()}
@@ -245,6 +328,22 @@ class RamanCooker():
             return sp_fit, sp - sp_fit
         else:
             return sp-sp_fit
+        
+    def process_knots(self, nu=None, sp=None, ret = None):
+        if nu is None: nu = self.nu
+        if sp is None: sp = self.sp
+        xlocs, y = self.knots2pars(nu, sp)
+        if len(xlocs) > 5:
+            tck = splrep(xlocs, y)
+            sp_fit = splev(nu, tck)
+            diff = self.sp - sp_fit
+            if ret == 'full':
+                return sp_fit, sp - sp_fit
+            else:
+                return sp-sp_fit
+        else:
+            return None
+        
     def export_xspans(self):
         return [s.xspan() for s in self.spans.values()]
     def load_spans(self, xspans):
@@ -324,18 +423,8 @@ class Span(DraggableObj):
         l,r = vert[0][0], vert[2][0]
         return min(l,r), max(l,r)
 
-class LabeledPoint(DraggableObj):
+class DraggablePoint(DraggableObj):
     "Labeled Point"
-    def __init__(self, obj, coll):
-        DraggableObj.__init__(self, obj, coll)
-        x,y = self.get_xy()
-        self.textlabel = obj.axes.text(x,y,"%3.3f, %3.3f"%(x,y))
-    def redraw(self):
-        xy = self.get_xy()
-        self.textlabel.set_position(xy)
-        self.textlabel.set_text("%3.3f, %3.3f"%xy)
-        DraggableObj.redraw(self)
-
                               
     def on_press(self, event):
         if not self.event_ok(event, True): return
@@ -346,7 +435,6 @@ class LabeledPoint(DraggableObj):
             pass
         elif event.button is 3:
             p = self.coll.pop(self.tag)
-            self.textlabel.remove()
             self.obj.remove()
             self.disconnect()
             self.redraw()
@@ -367,4 +455,22 @@ class LabeledPoint(DraggableObj):
     def get_xy(self):
         return self.obj.get_xdata()[0], self.obj.get_ydata()[0]
 
+class LabeledPoint(DraggablePoint):
+    "Labeled Point"
+    def __init__(self, obj, coll):
+        DraggableObj.__init__(self, obj, coll)
+        x,y = self.get_xy()
+        self.textlabel = obj.axes.text(x,y,"%3.3f, %3.3f"%(x,y))
+    def on_press(self,event):
+        DraggablePoint.on_press(self,event)
+        if self.event_ok(event, True) and event.button is 3:
+            self.textlabel.remove()
+
+    def redraw(self):
+        xy = self.get_xy()
+        self.textlabel.set_position(xy)
+        self.textlabel.set_text("%3.3f, %3.3f"%xy)
+        DraggableObj.redraw(self)
+
+                              
 
