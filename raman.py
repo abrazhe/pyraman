@@ -8,7 +8,6 @@ import renishaw as rshaw
 from scipy.interpolate import splrep, splev
 from scipy.optimize import leastsq
 
-
 def unique_tag(tags, max_tries = 1e4):
     n = 0
     while n < max_tries:
@@ -17,6 +16,10 @@ def unique_tag(tags, max_tries = 1e4):
         if not tag in tags:
             return tag
     return "Err"
+
+def rezip(coll):
+    import itertools as itt
+    return itt.izip(*coll)
 
 def in_range(n, region):
     return (n > region[0]) * (n < region[1])
@@ -50,6 +53,22 @@ def any_obj_contains(objects, event):
     return reduce(lambda x,y: x or y,
                   [o.obj.contains(event)[0]
                    for o in objects.values()])
+
+
+def mirrorpd(k, L):
+    if 0 <= k < L : return k
+    else: return -(k+1)%L
+
+
+def bspline_denoise(sig, phi = np.array([1./16, 1./4, 3./8, 1./4, 1./16])):
+    L = len(sig) 
+    padlen = len(phi)
+    assert L > padlen
+    indices = map(lambda i: mirrorpd(i, L),
+                  range(-padlen, 0) + range(0,L) + range(L, L+padlen))
+    padded_sig = sig[indices]
+    apprx = np.convolve(padded_sig, phi, mode='same')[padlen:padlen+L]
+    return apprx
 
 
 def onpress_peaknotifier(event, ax, x,y, coll):
@@ -95,7 +114,28 @@ def loc_max_pos(v):
 import pickle
 
 class RamanCooker():
-    def cook(self, nu, spectrum, s = 200, xspans = []):
+    def cook(self, nu, spectrum, mode='spans', **kwargs):
+        if mode =='spans':
+            self.mode = 'spans'
+            self.cook_spans(nu, spectrum, **kwargs)
+        elif mode == 'knots':
+            self.mode='knots'
+            self.cook_knots(nu, spectrum, **kwargs)
+        else:
+            print "Unknown mode: ", mode
+    def shared_setup(self, nu, spectrum):
+        self.connected = False
+        L = min(len(nu), len(spectrum))
+        self.nu = nu[:L]
+        self.sp = spectrum[:L]
+        self.axspl = pl.figure().add_subplot(111)
+        self.figspl = self.axspl.figure
+        self.axspl.plot(self.nu, self.sp)
+        self.pressed = None
+        self.plfit = self.axspl.plot([],[],'m--')[0]
+
+
+    def cook_spans(self, nu, spectrum, s = 200, xspans = []):
         """
         UI for removing baseline with splines,
         
@@ -107,57 +147,36 @@ class RamanCooker():
         - xspans: Spans (list of pairs of left,right nu values )
                   to exclude from fitting (empty list by default)
         """
-        #if not hasattr(self, 'connected'):
-        #    self.connected = False
-        self.connected = False
-        L = min(len(nu), len(spectrum))
-        self.nu = nu[:L]
-        self.sp = spectrum[:L]
-        self.axspl = pl.figure().add_subplot(111)
-        self.figspl = self.axspl.figure
+        self.shared_setup(nu, spectrum)
         self.spans = {}
         self.spl_k= 3
         self.curr_span = None
-        self.axspl.plot(self.nu, self.sp)
-        self.pressed = None
-        self.plfit = self.axspl.plot([],[],'m--')[0]
         self.spankw = {'facecolor':(0.9,0.9,0.9), 'alpha':0.9}
         self.load_recipe({'s':s, 'xspans':xspans})
-        #self.update_smooth_hint(True)
         if not self.connected:
             canvas = self.figspl.canvas
-            canvas.mpl_connect('button_press_event',self.onpress_spl)
-            canvas.mpl_connect('motion_notify_event',self.onmotion_spl)
-            canvas.mpl_connect('button_release_event',self.onrelease_spl)
-            canvas.mpl_connect('key_press_event',self.onkeypress_spl)
-            canvas.mpl_connect('scroll_event',self.onpress_spl)
+            canvas.mpl_connect('button_press_event',self.onpress_spans)
+            canvas.mpl_connect('motion_notify_event',self.onmotion_spans)
+            canvas.mpl_connect('button_release_event',self.onrelease_spans)
+            canvas.mpl_connect('key_press_event',self.onkeypress_spans)
+            canvas.mpl_connect('scroll_event',self.onpress_spans)
             self.connected = True
         return self.axspl
-    def cook_knots(self, nu, spectrum):
-        self.connected = False
-        L = min(len(nu), len(spectrum))
-        self.nu = nu[:L]
-        self.sp = spectrum[:L]
-        self.axspl = pl.figure().add_subplot(111)
-        self.figspl = self.axspl.figure
-        self.nuspan = 5.0
+    def cook_knots(self, nu, spectrum, bands = None, nuspan=20):
+        self.shared_setup(nu, spectrum)
+        self.bands = bands
+        self.nuspan = nuspan
         self.knots = {}
-        self.axspl.plot(self.nu, self.sp)
-        self.pressed = None
-        self.plfit = self.axspl.plot([],[],'m--')[0]
+        if bands:
+            _ = [pl.axvline(band, color='r') for band in bands]
         if not self.connected:
             canvas = self.figspl.canvas
-            canvas.mpl_connect('button_press_event',self.onpress_spl_knots)
-            #canvas.mpl_connect('motion_notify_event',self.onmotion_spl)
-            #canvas.mpl_connect('button_release_event',self.onrelease_spl)
-            canvas.mpl_connect('key_press_event',self.onkeypress_spl_knots)
-            #canvas.mpl_connect('scroll_event',self.onpress_spl)
+            canvas.mpl_connect('button_press_event',self.onpress_knots)
+            canvas.mpl_connect('key_press_event',self.onkeypress_knots)
             self.connected = True
         return self.axspl
  
     def update_smooth_hint(self,renewp=False):
-        #print "Renewp: ", renewp
-        #print "Hasattr: ", hasattr(self, 'smooth_hint')
         if (not hasattr(self, 'smooth_hint')) or renewp:
             self.smooth_hint = pl.text(1.0,1.1,
                                        "Smoothing: %3.2e"% self.spl_smooth,
@@ -171,15 +190,13 @@ class RamanCooker():
         if smooth_hint:
             self.update_smooth_hint()
         self.figspl.canvas.draw()
-    def onkeypress_spl(self,event):
+    def onkeypress_spans(self,event):
         if event.key == 'a':
-            self.apply_spl2(show=True)
-        pass
-    def onkeypress_spl_knots(self,event):
+            self.apply_recipe(show=True)
+    def onkeypress_knots(self,event):
         if event.key == 'a':
-            self.apply_spl_knots(show=True)
-        pass
-    def onpress_spl(self, event):
+            self.apply_recipe(show=True)
+    def onpress_spans(self, event):
         tb = pl.get_current_fig_manager().toolbar
         if event.inaxes != self.axspl or tb.mode != '': return
         x,y = event.xdata, event.ydata
@@ -196,32 +213,23 @@ class RamanCooker():
             self.spl_smooth *= 1.1
         elif event.button is 'down':
             self.spl_smooth /= 1.1
-        self.apply_spl2()
+        self.apply_recipe()
         self.axspl.axis(axrange)
         self.redraw()
-    def onpress_spl_knots(self, event):
+    def onpress_knots(self, event):
         tb = pl.get_current_fig_manager().toolbar
         if event.inaxes != self.axspl or tb.mode != '': return
         if any_obj_contains(self.knots, event) : return
         x,y = event.xdata, event.ydata
         axrange = self.axspl.get_xbound() + self.axspl.get_ybound()
         if event.button is 1:
-            self.pressed = x,y
-            x0 = event.xdata
-            label = unique_tag(self.knots.keys())
-            nux = in_range(self.nu, (x0-self.nuspan, x0+self.nuspan))
-            if np.any(nux):
-                y = np.mean(self.sp[nux])
-                lp =self.axspl.plot(x, y, 'ro', alpha=0.5, label=label)[0]
-                self.knots[label] = DraggablePoint(lp, self.knots)
-                self.axspl.axis(axrange)
-                pl.draw()
-            pass
-        self.apply_spl_knots()
+            kp = self.addknot(event.xdata)
+            self.knots[kp.tag] = kp
+        self.apply_recipe()
         self.axspl.axis(axrange)
         self.redraw(smooth_hint = False)
         
-    def onmotion_spl(self,event):
+    def onmotion_spans(self,event):
         if (self.pressed is None) or (event.inaxes != self.axspl):
             return
         x0 = self.pressed[0]
@@ -230,7 +238,7 @@ class RamanCooker():
             self.curr_span.set_xy([[x0,0], [x0,1], [x,1], [x,0], [x0,0]])
         self.redraw()
 
-    def onrelease_spl(self,event):
+    def onrelease_spans(self,event):
         if (not self.curr_span) or (event.inaxes != self.axspl):
             return
         vert = self.curr_span.get_xy()
@@ -241,13 +249,23 @@ class RamanCooker():
         else:
             self.curr_span.remove()
         self.curr_span = None
-        self.apply_spl2()
+        self.apply_recipe()
+
     def addspan(self, (x1,x2)):
         label = unique_tag(self.spans.keys())
         spanh = pl.axvspan(x1,x2,**self.spankw)
         spanh.set_label(label)
         return spanh
-
+    def addknot(self, x):
+        label = unique_tag(self.knots.keys())
+        nux = in_range(self.nu, (x-self.nuspan, x+self.nuspan))
+        if np.any(nux):
+            y = np.mean(self.sp[nux])
+            lp =self.axspl.plot(x, y, #xerr=self.nuspan,
+                                color='red', marker='o',
+                                alpha=0.5, label=label)[0]
+            kp = KnotPoint(lp, self.knots,  self.nu, self.sp, self.nuspan)
+            return kp
 
     def get_weights(self, nu):
         weights = np.ones(len(nu))
@@ -258,67 +276,33 @@ class RamanCooker():
             weights -= masked*(1-1e-6)
         return weights
    
-    def apply_spl2(self,show=False):
-        nu,sp = self.nu, self.sp
-        sp_fit, diff = self.process(nu, sp, 'full')
-        self.plfit.set_data(nu, sp_fit)
-        self.redraw()
-        if show:
-            plot_with_peaks(nu, diff)
-        return
-
     def knots2pars(self, nu = None, sp = None):
-        xlocs = sorted([k.get_xy()[0] for k in self.knots.values()])
+        xlocs = sorted([k.get_xloc() for k in self.knots.values()])
         if nu is None : nu = self.nu
         if sp is None : sp = self.sp
-        self.nuspan = 5.0
         nuxs = [in_range(nu, (x-self.nuspan, x + self.nuspan)) for x in xlocs]
         y = [np.mean(sp[nx]) for nx in nuxs]
         return xlocs,y
 
-    def update_knots(self):
-        for knot in self.knots.values():
-            x,y = knot.get_xy()
-            nux = in_range(self.nu, (x- self.nuspan, x+self.nuspan))
-            if np.any(nux):
-                y = np.mean(self.sp[nux])
-            knot.set_xy((x,y))
-            self.redraw(smooth_hint=False)
-    
-    def apply_spl_knots(self, show=False):
-        nu,sp = self.nu, self.sp
-        self.update_knots()
-        if len(self.knots.values()) > 5:
-            sp_fit, diff = self.process_knots(nu, sp, 'full')
-            self.plfit.set_data(nu, sp_fit)
-            self.redraw(smooth_hint = False)
-            if show:
-                plot_with_peaks(nu, diff)
-
-
-    def export_recipe(self, out=None):
-        rec =  {'s': self.spl_smooth,
-                'xspans':self.export_xspans()}
-        if isinstance(out, str):
-            fo = file(out, 'w')
-            pickle.dump(rec, fo)
-            fo.close()
-        return rec
-    def load_recipe(self, recipe):
-        if isinstance(recipe, dict):
-            rec = recipe
-        elif isinstance(recipe, str):
-            fo = file(recipe,'r')
-            rec = pickle.load(fo)
-            fo.close()
+    def apply_recipe(self, show=False):
+        if self.mode == 'spans':
+            smooth_hint = True
+            process = self.process_spans
+        elif self.mode=='knots':
+            smooth_hint = False
+            process = self.process_knots
         else:
-            print "Don't recognize type of recipe!"
-            print "Doing nothing"
+            print "[RamanCooker] applying recipe: unknown mode"
             return
-        self.spl_smooth = rec['s']
-        self.load_spans(rec['xspans'])
-        
-    def process(self, nu, sp, ret = None):
+        out = process(self.nu, self.sp, 'full')
+        if out:
+            self.plfit.set_data(self.nu, out[0])
+            self.redraw(smooth_hint=smooth_hint)
+            if show:
+                plot_with_peaks(self.nu, out[1])
+                if self.bands:
+                    _ = [pl.axvline(b, color='r') for b in self.bands] 
+    def process_spans(self, nu, sp, ret = None):
         w = self.get_weights(nu)
         nux,spx = nu[w>0.5], sp[w>0.5]
         spsum = spx.sum()
@@ -343,20 +327,67 @@ class RamanCooker():
                 return sp-sp_fit
         else:
             return None
+
+    def export_recipe(self, out=None):
+        if self.mode == 'spans':
+            rec =  {'s': self.spl_smooth,
+                    'xspans':self.export_xspans()}
+        elif self.mode == 'knots':
+            rec = {'nuspan': self.nuspan,
+                   'xlocs': self.export_knots()}
+        else:
+            print "[RamanCooker] unknown mode: ", self.mode
+        if isinstance(out, str):
+            fo = file(out, 'w')
+            pickle.dump(rec, fo)
+            fo.close()
+        return rec
+    def load_recipe(self, recipe, mode=None):
+        if isinstance(recipe, dict):
+            rec = recipe
+        elif isinstance(recipe, str):
+            fo = file(recipe,'r')
+            rec = pickle.load(fo)
+            fo.close()
+        else:
+            print "[RamanCooker] Can't recognize type of recipe!"
+            return
+        if mode is None:
+            if not hasattr(self, 'mode'):
+                print "[RamanCooker] Can't determine mode"
+                return
+            mode = self.mode
+        else:
+            self.mode = mode
+        if mode == 'spans':
+            self.spl_smooth = rec['s']
+            self.load_spans(rec['xspans'])
+        elif mode == 'knots':
+            self.nuspan = rec['nuspan']
+            self.load_knots(rec['xlocs'])
+            
+        
         
     def export_xspans(self):
         return [s.xspan() for s in self.spans.values()]
+    def export_knots(self):
+        return sorted([k.get_xloc() for k in self.knots.values()])
     def load_spans(self, xspans):
         for xsp in xspans:
             newspan = self.addspan(xsp)
             label = newspan.get_label()
             self.spans[label] = Span(newspan, self.spans)
-        self.apply_spl2()
+        self.apply_recipe()
+    def load_knots(self, xlocs):
+        for x in xlocs:
+            kp = self.addknot(x)
+            self.knots[kp.tag] = kp
+        self.apply_recipe()
         
 
 # --- ROIS
 
-class DraggableObj:
+class DraggableObj(object):
     verbose = True
     def __init__(self, obj, coll):
         self.coll = coll
@@ -455,10 +486,31 @@ class DraggablePoint(DraggableObj):
     def get_xy(self):
         return self.obj.get_xdata()[0], self.obj.get_ydata()[0]
 
+class KnotPoint(DraggablePoint):
+    "Knot point"
+    def __init__(self, obj, coll, nu, sp, nuspan):
+        super(KnotPoint, self).__init__(obj, coll)
+        self.nu = nu
+        self.sp = sp
+        self.nuspan = nuspan
+    def move(self, p):
+        "Move the KnotPoint when the mouse is pressed on it"
+        xp,yp, x0, y0 = self.pressed
+        dx = p[0] - xp
+        x = x0+dx
+        nx = in_range(self.nu, (x- self.nuspan, x+self.nuspan))
+        y = np.mean(self.sp[nx])
+        self.obj.set_data(x,y)
+        self.redraw()
+    def get_xloc(self):
+        return self.obj.get_xdata()[0]
+
+        
+
 class LabeledPoint(DraggablePoint):
     "Labeled Point"
     def __init__(self, obj, coll):
-        DraggableObj.__init__(self, obj, coll)
+        super(LabeledPoint, self).__init__(obj, coll)
         x,y = self.get_xy()
         self.textlabel = obj.axes.text(x,y,"%3.3f, %3.3f"%(x,y))
     def on_press(self,event):

@@ -2,8 +2,17 @@
 
 import numpy as np
 import pylab as pl
-from scipy import stats
+import operator as op
+from scipy import stats,ndimage,signal
 
+bclose, bopen = ndimage.binary_closing, ndimage.binary_opening
+
+def load_spectrum(fname):
+    "Read spectrum exported as text from Renishaw software"
+    spec = np.loadtxt(fname)
+    knu = np.argsort(spec[:,0])
+    return spec[knu,:]
+              
 def load_image(fname):
     "Loads image exported as text from Renishaw software"
     d = np.loadtxt(fname)
@@ -24,6 +33,8 @@ def load_image(fname):
         out[:,:,j] = pre_out[:,:,k].T
     return out, nu[knu], x, y
 
+
+
 def process_image(arr, fn):
     "Apply a function to each spectrum in an image"
     figsh = arr.shape[:2]
@@ -35,42 +46,94 @@ def process_image(arr, fn):
             out[r,c] = fn(arr[r,c])
     return out
 
-def range_sum(arr, nu, nurange):
-    "Sum intensities in the given nu range"
-    return process_image(arr, lambda x: np.sum(x[in_range(nu,nurange)]))
+def imagemap(fn, arr):
+    return process_image(arr, fn)
 
-def range_rms(arr, nu, nurange):
-    "RMS intensities in the given nu range"
-    return process_image(arr, lambda x: pl.rms_flat(x[in_range(nu,nurange)]))
-    
+
 def in_range(vec, range):
     return (vec > range[0]) * (vec < range[1])
 
-def range_sum(arr, nu, nurange):
-    "Sum intensities in the given nu range"
-    return process_image(arr, lambda x: np.sum(x[in_range(nu,nurange)]))
+def range_imagemap(fn, arr, nu, nurange):
+    return imagemap(lambda x: fn(x[in_range(nu,nurange)]))
+
+#def range_rms(arr, nu, nurange):
+#    return range_imagemap(pl.rms_flat, arr, nu, nurange)
 
 def range_rms(arr, nu, nurange):
     "RMS intensities in the given nu range"
-    return process_image(arr, lambda x: pl.rms_flat(x[in_range(nu,nurange)]))
+    def _fn(x) : return pl.rms_flat(x[in_range(nu,nurange)])
+    return imagemap(_fn, arr)
     
 
+def range_sum(arr, nu, nurange):
+    "Sum intensities in the given nu range"
+    def _fn(x) : return np.sum(x[in_range(nu,nurange)])
+    return imagemap(_fn, arr)
+
+def range_mean(arr, nu, nurange):
+    "Sum intensities in the given nu range"
+    def _fn(x) : return np.mean(x[in_range(nu,nurange)])
+    return imagemap(_fn, arr)
 
 
+def valid_loc(loc,shape):
+    "location not outside bounds"
+    return reduce(op.__and__, [(0 <= x < s) for x,s in zip(loc,shape)])
+
+
+def neighbours_x(loc):
+    n = len(loc)
+    d = np.diag(np.ones(n))
+    return map(tuple, np.concatenate((d,-d)) + loc)
+
+
+def adaptive_median_filter(m):
+    out = m.copy()
+    mask = in_range(m, (percentile(m,1.0), percentile(m,99.0)))
+    for loc in zip(*np.where(mask < 1)):
+        out[loc] = np.median([m[x] for x in neighbours_x(loc) if valid_loc(x, m.shape)])
+    return out
+
+
+
+def peak_ratio(arr, nu, nuint_n, nuint_d, fn = range_mean):
+    arr2 = arr
+    nominator = fn(arr2, nu, nuint_n)
+    denominator = fn(arr2, nu, nuint_d)
+    mask_n = (nominator > np.median(nominator))*(nominator>0)
+    mask_d = denominator > np.median(denominator)*(denominator > 0)
+    mask = bopen(bclose(mask_n * mask_d))
+    return adaptive_median_filter(mask*nominator/denominator)
+
+def peak_ratio2(arr, nu, nuint_n, nuint_d, fn = range_mean,
+                baseline_region = (1700,2000)):
+    nominator = fn(arr, nu, nuint_n)
+    denominator = fn(arr, nu, nuint_d)
+    x = range_rms(arr, nu, baseline_region)
+    th = x.mean() + x.std()
+    mask_n = (range_rms(arr,nu, nuint_n) > th)*(nominator > 0)
+    mask_d = (range_rms(arr,nu, nuint_d) > th)*(denominator > 0)
+    mask = bopen(bclose(mask_n * mask_d))
+    return adaptive_median_filter(mask*nominator/denominator)
+
+
+    
 def toggle(val):
     if val : return False
     else : return True
+
+def percentile(arr, p):
+    return stats.scoreatpercentile(arr.flatten(), p)
     
 def inspect_image(arr, nu, 
                   fn = range_rms, nuint=None,
+                  filt_output = False,
                   **kwargs):
     "Inspect an image: show spectra for a pixel mouse hovers on"
     fh  = pl.figure();
     ax2 = pl.subplot(122);
     plh = pl.plot(nu, arr[0,0], 'k-')[0]
-    mn = stats.scoreatpercentile(arr.flatten(), 0.1)
-    mx = stats.scoreatpercentile(arr.flatten(), 99.9)
-    print mn, mx
+    mn, mx = [percentile(arr,p) for p in (0.5, 99.5)]
     pl.axis((nu[0], nu[-1], mn, mx))
 
     if nuint is None:
@@ -100,18 +163,15 @@ def inspect_image(arr, nu,
             hoverp[1] = None
             fh.canvas.draw()
         
-        
     ax1 = pl.subplot(121);
-    pl.imshow(fn(arr, nu, nuint), aspect='equal', **kwargs)
+    if filt_output:
+        arrshow = ndimage.median_filter(fn(arr, nu, nuint), 3) # looks nicer
+    else:
+        arrshow = fn(arr, nu, nuint)
+    pl.imshow(arrshow, aspect='equal', **kwargs)
     fh.canvas.mpl_connect('motion_notify_event', _on_hover)
     fh.canvas.mpl_connect('button_press_event', _on_press)
 
 
 
-def load_spectrum(fname):
-    "Read spectrum exported as text from Renishaw software"
-    spec = np.loadtxt(fname)
-    knu = np.argsort(spec[:,0])
-    return spec[knu,:]
-              
 
