@@ -96,6 +96,14 @@ def adaptive_median_filter(m):
     return out
 
 
+def simple_peak_ratio(arr, nu, nuint_n, nuint_d, fn=range_mean, use_filter=False):
+    nominator = fn(arr, nu, nuint_n)
+    denominator = fn(arr, nu, nuint_d)
+    out = np.ma.masked_where(denominator < finfo.float(eps), nominator/denominator)
+    if use_filter:
+        return adaptive_median_filter(out)
+    else:
+        return out
 
 def peak_ratio(arr, nu, nuint_n, nuint_d, fn = range_mean):
     arr2 = arr
