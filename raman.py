@@ -260,7 +260,7 @@ class RamanCooker():
         label = unique_tag(self.knots.keys())
         nux = in_range(self.nu, (x-self.nuspan, x+self.nuspan))
         if np.any(nux):
-            y = np.mean(self.sp[nux])
+            y = np.mean(self.sp[nux]) # todo: use median as an option
             lp =self.axspl.plot(x, y, #xerr=self.nuspan,
                                 color='red', marker='o',
                                 alpha=0.5, label=label)[0]

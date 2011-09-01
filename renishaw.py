@@ -47,6 +47,7 @@ def process_image(arr, fn):
     return out
 
 def imagemap(fn, arr):
+    "Map a function on an array, wrapper for process_image"
     return process_image(arr, fn)
 
 
@@ -106,14 +107,19 @@ def peak_ratio(arr, nu, nuint_n, nuint_d, fn = range_mean):
     return adaptive_median_filter(mask*nominator/denominator)
 
 def peak_ratio2(arr, nu, nuint_n, nuint_d, fn = range_mean,
-                baseline_region = (1700,2000)):
+                baseline_region = (1750,2000)):
     nominator = fn(arr, nu, nuint_n)
     denominator = fn(arr, nu, nuint_d)
     x = range_rms(arr, nu, baseline_region)
-    th = x.mean() + x.std()
-    mask_n = (range_rms(arr,nu, nuint_n) > th)*(nominator > 0)
-    mask_d = (range_rms(arr,nu, nuint_d) > th)*(denominator > 0)
+    th_rms = x.mean() + 5.0*x.std()
+    x = fn(arr, nu, baseline_region)
+    th_fn = x + 5.0*x.std()
+    mask_n = (range_rms(arr,nu, nuint_n) > th_rms)*(nominator > th_fn)
+    mask_d = (range_rms(arr,nu, nuint_d) > th_rms)*(denominator >th_fn)
+    #mask_n = (nominator > th_fn)
+    #mask_d = (denominator > th_fn)
     mask = bopen(bclose(mask_n * mask_d))
+    #return mask_n*mask_d
     return adaptive_median_filter(mask*nominator/denominator)
 
 
