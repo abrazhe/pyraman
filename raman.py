@@ -6,7 +6,7 @@ import pylab as pl
 import renishaw as rshaw
 
 from scipy.interpolate import splrep, splev
-from scipy.optimize import leastsq
+#from scipy.optimize import leastsq
 
 def unique_tag(tags, max_tries = 1e4):
     n = 0
@@ -114,6 +114,7 @@ def loc_max_pos(v):
 import pickle
 
 class RamanCooker():
+    linestyle = 'k-'
     def cook(self, nu, spectrum, mode='spans', **kwargs):
         if mode =='spans':
             self.mode = 'spans'
@@ -130,12 +131,13 @@ class RamanCooker():
         self.sp = spectrum[:L]
         self.axspl = pl.figure().add_subplot(111)
         self.figspl = self.axspl.figure
-        self.axspl.plot(self.nu, self.sp)
+        self.axspl.plot(self.nu, self.sp, self.linestyle)
         self.pressed = None
         self.plfit = self.axspl.plot([],[],'m--')[0]
 
 
-    def cook_spans(self, nu, spectrum, s = 200, xspans = []):
+    def cook_spans(self, nu, spectrum, s=200, 
+                   xspans=[], bands=None):
         """
         UI for removing baseline with splines,
         
@@ -149,6 +151,9 @@ class RamanCooker():
         """
         self.shared_setup(nu, spectrum)
         self.spans = {}
+        self.bands = bands
+        if bands:
+            _ = [pl.axvline(band, color='r') for band in bands]
         self.spl_k= 3
         self.curr_span = None
         self.spankw = {'facecolor':(0.9,0.9,0.9), 'alpha':0.9}
@@ -162,11 +167,14 @@ class RamanCooker():
             canvas.mpl_connect('scroll_event',self.onpress_spans)
             self.connected = True
         return self.axspl
-    def cook_knots(self, nu, spectrum, bands = None, nuspan=20):
+
+    def cook_knots(self, nu, spectrum, bands = None, nuspan=20, xlocs=None):
         self.shared_setup(nu, spectrum)
         self.bands = bands
         self.nuspan = nuspan
         self.knots = {}
+	if xlocs is not None:
+	    self.load_knots(xlocs)
         if bands:
             _ = [pl.axvline(band, color='r') for band in bands]
         if not self.connected:

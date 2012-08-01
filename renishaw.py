@@ -35,6 +35,7 @@ def load_image(fname):
 
 
 
+
 def process_image(arr, fn):
     "Apply a function to each spectrum in an image"
     figsh = arr.shape[:2]
@@ -45,6 +46,55 @@ def process_image(arr, fn):
         for c in xrange(ncol):
             out[r,c] = fn(arr[r,c])
     return out
+
+
+def mirrorpd(k, L):
+    if 0 <= k < L : return k
+    else: return -(k+1)%L
+
+
+def bspline_denoise(sig, phi = np.array([1./16, 1./4, 3./8, 1./4, 1./16])):
+    L = len(sig) 
+    padlen = len(phi)
+    assert L > padlen
+    indices = map(lambda i: mirrorpd(i, L),
+                  range(-padlen, 0) + range(0,L) + range(L, L+padlen))
+    padded_sig = sig[indices]
+    apprx = np.convolve(padded_sig, phi, mode='same')[padlen:padlen+L]
+    return apprx
+
+
+def locextr(v, x = None, mode = 1, **kwargs):
+   from scipy.interpolate import splrep,splev
+   "Finds local maxima when mode = 1, local minima when mode = -1"
+   if x is None:
+       x = np.arange(len(v))
+       xfit = np.linspace(1,len(v), len(v)*10)
+   else:
+       xfit = np.linspace(x[0], x[-1], len(v)*10)
+   tck = splrep(x, v, **kwargs)
+   vals = splev(xfit, tck)
+   dersign = mode*np.sign(splev(xfit, tck, der=1))
+   extrema = dersign[:-1] - dersign[1:] > 1.5
+   return xfit[extrema], vals[extrema]
+
+
+def find_peak(x, band,nhood=6):
+    """
+    given nu values and band to search around, return a function to map
+    spectrum to location of the highest peak in the nhood of band
+    """
+    def _(y):
+	yn = y/np.std(y)
+	peaks = [lm for lm in zip(*locextr(bspline_denoise(y),x))
+		 if np.abs(lm[0]-band) <=nhood]
+	if len(peaks):
+	    loc, amp = peaks[np.argmax([p[1] for p in peaks])]
+	else:
+	    loc, amp = -1,-1
+	return np.array((loc,amp))
+    return _
+	
 
 def imagemap(fn, arr):
     "Map a function on an array, wrapper for process_image"
@@ -96,39 +146,49 @@ def adaptive_median_filter(m):
     return out
 
 
-def simple_peak_ratio(arr, nu, nuint_n, nuint_d, fn=range_mean, use_filter=False):
+def simple_peak_ratio(arr, nu, nuint_n, nuint_d, fn=range_mean, filt_output=False):
     nominator = fn(arr, nu, nuint_n)
     denominator = fn(arr, nu, nuint_d)
-    out = np.ma.masked_where(denominator < finfo.float(eps), nominator/denominator)
-    if use_filter:
+    out = np.ma.masked_where(denominator < np.finfo(float).eps, nominator/denominator)
+    if filt_output:
         return adaptive_median_filter(out)
     else:
         return out
 
-def peak_ratio(arr, nu, nuint_n, nuint_d, fn = range_mean):
+def peak_ratio(arr, nu, nuint_n, nuint_d, fn = range_mean, filt_output=True):
     arr2 = arr
     nominator = fn(arr2, nu, nuint_n)
     denominator = fn(arr2, nu, nuint_d)
     mask_n = (nominator > np.median(nominator))*(nominator>0)
-    mask_d = denominator > np.median(denominator)*(denominator > 0)
+    mask_d = (denominator > np.median(denominator))*(denominator > 0)
     mask = bopen(bclose(mask_n * mask_d))
-    return adaptive_median_filter(mask*nominator/denominator)
+    out = mask*(nominator/denominator)
+    if filt_output:
+	out = adaptive_median_filter(out)
+    return out
 
 def peak_ratio2(arr, nu, nuint_n, nuint_d, fn = range_mean,
+		mask = None,
+                filt_output = True,
+		as_masked_array = False,
                 baseline_region = (1750,2000)):
     nominator = fn(arr, nu, nuint_n)
     denominator = fn(arr, nu, nuint_d)
     x = range_rms(arr, nu, baseline_region)
     th_rms = x.mean() + 5.0*x.std()
     x = fn(arr, nu, baseline_region)
-    th_fn = x + 5.0*x.std()
-    mask_n = (range_rms(arr,nu, nuint_n) > th_rms)*(nominator > th_fn)
-    mask_d = (range_rms(arr,nu, nuint_d) > th_rms)*(denominator >th_fn)
-    #mask_n = (nominator > th_fn)
-    #mask_d = (denominator > th_fn)
-    mask = bopen(bclose(mask_n * mask_d))
-    #return mask_n*mask_d
-    return adaptive_median_filter(mask*nominator/denominator)
+    th_fn = x.mean() + 5.0*x.std()
+    if mask is None:
+	mask_n = (range_rms(arr,nu, nuint_n) > th_rms)*(nominator > th_fn)
+	mask_d = (range_rms(arr,nu, nuint_d) > th_rms)*(denominator >th_fn)
+	mask = mask_n*mask_d
+    mask = mask*(denominator > th_fn)*(nominator > th_fn)
+    out = mask*(nominator/denominator)
+    if filt_output:
+        out = adaptive_median_filter(out)
+    if as_masked_array:
+	out = np.ma.masked_where(out <=0, out)
+    return out
 
 
     
