@@ -55,16 +55,16 @@ def any_obj_contains(objects, event):
                    for o in objects.values()])
 
 
-def mirrorpd(k, L):
-    if 0 <= k < L : return k
-    else: return -(k+1)%L
 
 
 def bspline_denoise(sig, phi = np.array([1./16, 1./4, 3./8, 1./4, 1./16])):
+    def _mirrorpd(k, L):
+	if 0 <= k < L : return k
+	else: return -(k+1)%L
     L = len(sig) 
     padlen = len(phi)
     assert L > padlen
-    indices = map(lambda i: mirrorpd(i, L),
+    indices = map(lambda i: _mirrorpd(i, L),
                   range(-padlen, 0) + range(0,L) + range(L, L+padlen))
     padded_sig = sig[indices]
     apprx = np.convolve(padded_sig, phi, mode='same')[padlen:padlen+L]
@@ -190,7 +190,7 @@ class RamanCooker():
 	if p is None:
 	    p = 0.1
 	self.shared_setup(nu, spectrum)
-	baseline = baseline_als(spectrum, lam, p)
+	baseline = als(spectrum, lam, p)
 	self.plfit.set_data(nu, baseline)
 	return self.axspl
 	
@@ -551,7 +551,7 @@ class LabeledPoint(DraggablePoint):
 from scipy import sparse
 from scipy.sparse.linalg import spsolve
 
-def baseline_als(y, lam, p, niter=20, tol=1e-5):
+def als(y, lam, p, niter=20, tol=1e-5):
     """Implements an Asymmetric Least Squares Smoothing
     baseline correction algorithm
     (P. Eilers, H. Boelens 2005)
@@ -572,7 +572,7 @@ def baseline_als(y, lam, p, niter=20, tol=1e-5):
 	zprev = z
     return z
 
-def baseline_fillpeaks(y, lam, hwi, niter, nint):
+def fillpeaks(y, lam, hwi, niter, nint):
     """Implements and iterative baseline correction algorithm based on
     mean suppression (originally written for R by Kristian Hovde Liland) """
     L = len(y)
@@ -580,10 +580,10 @@ def baseline_fillpeaks(y, lam, hwi, niter, nint):
     ww = np.ones(L)
     # make decreasing windows:
     if niter > 1:
-	d1 = log10(hwi)
+	d1 = np.log10(hwi)
 	d2 = 0.0
-	_x = np.arange(0,niter-1)*(d2-d1)/(floor(niter)-1)
-	w = ceil(10**(np.concatenate((d1+_x, [d2]))))
+	_x = np.arange(0,niter-1)*(d2-d1)/(np.floor(niter)-1)
+	w = np.ceil(10**(np.concatenate((d1+_x, [d2]))))
     else:
 	w = [hwi]
     # Primary smoothing
@@ -598,7 +598,6 @@ def baseline_fillpeaks(y, lam, hwi, niter, nint):
     xx = np.array([np.min(z[l:r+1]) for l,r in zip(lefts,rights)])
     for k in range(niter):
 	w0 = w[k]
-	print w0
 	# to the right
 	for i in range(1,nint-1):
 	    l,r = max(i-w0,0), min(i+w0+1, nint)
@@ -608,7 +607,6 @@ def baseline_fillpeaks(y, lam, hwi, niter, nint):
 	for i in range(1,nint-1):
 	    j = nint-i
 	    l,r = max(j-w0,0), min(j+w0+1, nint)
-	    print j,l,r
 	    a = np.mean(xx[l:r])
 	    xx[j] = min(a, xx[j])
     tck = splrep(minip,xx)
@@ -616,5 +614,39 @@ def baseline_fillpeaks(y, lam, hwi, niter, nint):
 	
     
     
-def baseline_asw(v, **kwargs):
-    from raman import atrous
+def aws(v, **kwargs):
+    import wavelets
+    z = wavelets.asymmetric_smooth(v,verbose=True,**kwargs)
+    return z
+
+
+def locextr(v, x = None, mode = 1, **kwargs):
+   from scipy.interpolate import splrep,splev
+   "Finds local maxima when mode = 1, local minima when mode = -1"
+   if x is None:
+       x = np.arange(len(v))
+       xfit = np.linspace(1,len(v), len(v)*10)
+   else:
+       xfit = np.linspace(x[0], x[-1], len(v)*10)
+   tck = splrep(x, v, **kwargs)
+   vals = splev(xfit, tck)
+   dersign = mode*np.sign(splev(xfit, tck, der=1))
+   extrema = dersign[:-1] - dersign[1:] > 1.5
+   return xfit[extrema], vals[extrema]
+
+
+def find_peak(x, band,nhood=6):
+    """
+    given nu values and band to search around, return a function to map
+    spectrum to location of the highest peak in the nhood of band
+    """
+    def _(y):
+	yn = y/np.std(y)
+	peaks = [lm for lm in zip(*locextr(bspline_denoise(y),x))
+		 if np.abs(lm[0]-band) <=nhood]
+	if len(peaks):
+	    loc, amp = peaks[np.argmax([p[1] for p in peaks])]
+	else:
+	    loc, amp = -1,-1
+	return np.array((loc,amp))
+    return _

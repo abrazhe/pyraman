@@ -43,7 +43,7 @@ class _MPLFigureEditor(Editor):
 class MPLFigureEditor(BasicEditorFactory):
     klass = _MPLFigureEditor
 
-from raman import baseline_als
+from baselines import als
 
 class ALS_traits(HasTraits):
     figure = Instance(Figure, ())
@@ -71,7 +71,7 @@ class ALS_traits(HasTraits):
 	self.pl2 = self.axes.plot(self.nu,self.baseline, 'm--')[0]
 	return figure
     def _update_baseline(self):
-	self.baseline = baseline_als(self.sp, 10**self.smoother, self.p)
+	self.baseline = als(self.sp, 10**self.smoother, self.p)
 	if hasattr(self, 'pl2'):
 	    self.pl2.set_data(self.nu,self.baseline)
 	    self.figure.canvas.draw()

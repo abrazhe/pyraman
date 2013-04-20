@@ -14,10 +14,14 @@ classifiers=[
 
 
 setup(name='pyraman',
-      version='0.2.4',
+      version='0.3.3',
       description = 'Lib to process Raman spectra in pylab',
       author = 'Alexey Brazhe',
-      py_modules = ['raman', 'renishaw', 'oldraman'],
+      py_modules = ['raman.baselines',
+		    'raman.images',
+		    'raman.renishaw',
+		    'raman.wavelets',
+		    'raman.raman_ui'],
       classifiers=classifiers,
       )
 

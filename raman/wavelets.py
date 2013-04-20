@@ -587,7 +587,7 @@ def DFoF_asym(v, level=5, r=1.0):
     return out
     
 
-def asymmetric_smooth(v, level=8, niter=1000, tol = 1e-5, r=1.0,verbose=False):
+def asymmetric_smooth(v, level=5, niter=100, tol = 1e-6, r=1.0,verbose=False):
     import pylab as pl
     acc = []
     vcurr = np.copy(v)
