@@ -1,12 +1,12 @@
 # License: GPL
-# Copyright: Alexey Brazhe, 2010
+# Copyright: Alexey Brazhe, 2010-2013
 
 import numpy as np
 import pylab as pl
 import renishaw as rshaw
 
 from scipy.interpolate import splrep, splev
-from scipy.optimize import leastsq
+#from scipy.optimize import leastsq
 
 def unique_tag(tags, max_tries = 1e4):
     n = 0
@@ -114,12 +114,11 @@ def loc_max_pos(v):
 import pickle
 
 class RamanCooker():
+    linestyle = 'k-'
     def cook(self, nu, spectrum, mode='spans', **kwargs):
         if mode =='spans':
-            self.mode = 'spans'
             self.cook_spans(nu, spectrum, **kwargs)
         elif mode == 'knots':
-            self.mode='knots'
             self.cook_knots(nu, spectrum, **kwargs)
         else:
             print "Unknown mode: ", mode
@@ -130,12 +129,13 @@ class RamanCooker():
         self.sp = spectrum[:L]
         self.axspl = pl.figure().add_subplot(111)
         self.figspl = self.axspl.figure
-        self.axspl.plot(self.nu, self.sp)
+        self.axspl.plot(self.nu, self.sp, self.linestyle)
         self.pressed = None
         self.plfit = self.axspl.plot([],[],'m--')[0]
 
 
-    def cook_spans(self, nu, spectrum, s = 200, xspans = []):
+    def cook_spans(self, nu, spectrum, s=200, 
+                   xspans=[], bands=None):
         """
         UI for removing baseline with splines,
         
@@ -149,6 +149,10 @@ class RamanCooker():
         """
         self.shared_setup(nu, spectrum)
         self.spans = {}
+        self.bands = bands
+	self.mode = 'spans'
+        if bands:
+            _ = [pl.axvline(band, color='r') for band in bands]
         self.spl_k= 3
         self.curr_span = None
         self.spankw = {'facecolor':(0.9,0.9,0.9), 'alpha':0.9}
@@ -162,11 +166,15 @@ class RamanCooker():
             canvas.mpl_connect('scroll_event',self.onpress_spans)
             self.connected = True
         return self.axspl
-    def cook_knots(self, nu, spectrum, bands = None, nuspan=20):
+
+    def cook_knots(self, nu, spectrum, bands = None, nuspan=20, xlocs=None):
         self.shared_setup(nu, spectrum)
         self.bands = bands
         self.nuspan = nuspan
         self.knots = {}
+	self.mode = 'knots'
+	if xlocs is not None:
+	    self.load_knots(xlocs)
         if bands:
             _ = [pl.axvline(band, color='r') for band in bands]
         if not self.connected:
@@ -175,6 +183,18 @@ class RamanCooker():
             canvas.mpl_connect('key_press_event',self.onkeypress_knots)
             self.connected = True
         return self.axspl
+
+    def cook_als(self, nu, spectrum, lam = None, p = None):
+	if lam is None:
+	    lam = len(spectrum)**2
+	if p is None:
+	    p = 0.1
+	self.shared_setup(nu, spectrum)
+	baseline = baseline_als(spectrum, lam, p)
+	self.plfit.set_data(nu, baseline)
+	return self.axspl
+	
+		
  
     def update_smooth_hint(self,renewp=False):
         if (not hasattr(self, 'smooth_hint')) or renewp:
@@ -486,6 +506,8 @@ class DraggablePoint(DraggableObj):
     def get_xy(self):
         return self.obj.get_xdata()[0], self.obj.get_ydata()[0]
 
+
+
 class KnotPoint(DraggablePoint):
     "Knot point"
     def __init__(self, obj, coll, nu, sp, nuspan):
@@ -525,4 +547,74 @@ class LabeledPoint(DraggablePoint):
         DraggableObj.redraw(self)
 
                               
+### --- Non-interactive (global) baseline algorithms --
+from scipy import sparse
+from scipy.sparse.linalg import spsolve
 
+def baseline_als(y, lam, p, niter=20, tol=1e-5):
+    """Implements an Asymmetric Least Squares Smoothing
+    baseline correction algorithm
+    (P. Eilers, H. Boelens 2005)
+    """
+    L = len(y)
+    D = sparse.csc_matrix(np.diff(np.eye(L),2))
+    w = np.ones(L)
+    zprev = None
+    for i in xrange(niter):
+	W = sparse.spdiags(w, 0, L, L)
+	Z = W + lam*np.dot(D,D.T)
+	z = spsolve(Z,w*y)
+	w = p*(y>z) + (1-p)*(y<=z)
+	if zprev is not None:
+	    err = np.sum((z-zprev)**2)
+	    if err < tol:
+		return z
+	zprev = z
+    return z
+
+def baseline_fillpeaks(y, lam, hwi, niter, nint):
+    """Implements and iterative baseline correction algorithm based on
+    mean suppression (originally written for R by Kristian Hovde Liland) """
+    L = len(y)
+    D = sparse.csc_matrix(np.diff(np.eye(L),2))
+    ww = np.ones(L)
+    # make decreasing windows:
+    if niter > 1:
+	d1 = log10(hwi)
+	d2 = 0.0
+	_x = np.arange(0,niter-1)*(d2-d1)/(floor(niter)-1)
+	w = ceil(10**(np.concatenate((d1+_x, [d2]))))
+    else:
+	w = [hwi]
+    # Primary smoothing
+    W = sparse.spdiags(ww, 0, L, L)
+    Z = W + lam*np.dot(D,D.T)
+    z = spsolve(Z,y)
+    #Center points
+    lims = np.linspace(0,L-1, nint+1)
+    lefts = np.ceil(lims[:-1])
+    rights = np.floor(lims[1:])
+    minip = np.round((lefts+rights)/2)
+    xx = np.array([np.min(z[l:r+1]) for l,r in zip(lefts,rights)])
+    for k in range(niter):
+	w0 = w[k]
+	print w0
+	# to the right
+	for i in range(1,nint-1):
+	    l,r = max(i-w0,0), min(i+w0+1, nint)
+	    a = np.mean(xx[l:r])
+	    xx[i] = min(a,xx[i])
+	# to the left
+	for i in range(1,nint-1):
+	    j = nint-i
+	    l,r = max(j-w0,0), min(j+w0+1, nint)
+	    print j,l,r
+	    a = np.mean(xx[l:r])
+	    xx[j] = min(a, xx[j])
+    tck = splrep(minip,xx)
+    return splev(np.arange(L),tck)
+	
+    
+    
+def baseline_asw(v, **kwargs):
+    from raman import atrous
