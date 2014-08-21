@@ -562,7 +562,7 @@ def als(y, lam, p, niter=20, tol=1e-5):
     zprev = None
     for i in xrange(niter):
 	W = sparse.spdiags(w, 0, L, L)
-	Z = W + lam*np.dot(D,D.T)
+	Z = W + lam*D.dot(D.T)
 	z = spsolve(Z,w*y)
 	w = p*(y>z) + (1-p)*(y<=z)
 	if zprev is not None:
@@ -588,7 +588,7 @@ def fillpeaks(y, lam, hwi, niter, nint):
 	w = [hwi]
     # Primary smoothing
     W = sparse.spdiags(ww, 0, L, L)
-    Z = W + lam*np.dot(D,D.T)
+    Z = W + lam*D.dot(D.T)
     z = spsolve(Z,y)
     #Center points
     lims = np.linspace(0,L-1, nint+1)
