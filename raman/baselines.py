@@ -330,7 +330,7 @@ class RamanCooker():
             self.plfit.set_data(self.nu, out[0])
             self.redraw(smooth_hint=smooth_hint)
             if show:
-                plot_with_peaks(self.nu, out[1])
+                self.peak_view = plot_with_peaks(self.nu, out[1])
                 if self.bands:
                     _ = [pl.axvline(b, color='r') for b in self.bands] 
     def process_spans(self, nu, sp, ret = None):
