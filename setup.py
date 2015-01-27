@@ -14,7 +14,7 @@ classifiers=[
 
 
 setup(name='pyraman',
-      version='0.3.3',
+      version='0.3.4',
       description = 'Lib to process Raman spectra in pylab',
       author = 'Alexey Brazhe',
       py_modules = ['raman.baselines',

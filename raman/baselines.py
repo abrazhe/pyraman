@@ -91,10 +91,21 @@ def onpress_peaknotifier(event, ax, x,y, coll):
 def plot_with_peaks(x, y, **kwargs):
     peak_points = {}
     def print_coll(event):
+        try: 
+            import pandas as pd
+            pd_exists = True
+        except ImportError:
+            print "Can't load pandas"
+            pd_exists = False
         if event.key == 'e':
-            for xy in sorted([lp.get_xy() for lp in peak_points.values()],
-                             key=lambda x:x[0]):
-                print '%3.3f, %3.3f' % xy
+            coll = sorted([lp.get_xy() for lp in peak_points.values()],
+                          key=lambda x:x[0])
+            if not pd_exists:
+                for xy in coll:
+                    print '%3.3f, %3.3f' % xy
+            else:
+                df = pd.DataFrame(np.ravel(coll))
+                print df
         return
     newax = pl.figure().add_subplot(111)
     newax.plot(x,y)
