@@ -89,21 +89,21 @@ def onpress_peaknotifier(event, ax, x,y, coll):
         
         
 def print_coll(coll, name = None):
-        try: 
-            import pandas as pd
-            pd_exists = True
-        except ImportError:
-            print "Can't load pandas"
-            pd_exists = False
-        coll = sorted([lp.get_xy() for lp in peak_points.values()], key=lambda x:x[0])
-        if not pd_exists:
-            for xy in coll:
-                print '%3.3f, %3.3f' % xy
-        else:
-            df = pd.DataFrame(np.ravel(coll))
-            print df
-            if name is not None:
-               df.to_csv(name)
+    try: 
+        import pandas as pd
+        pd_exists = True
+    except ImportError:
+        print "Can't load pandas"
+        pd_exists = False
+    coll = sorted([lp.get_xy() for lp in peak_points.values()], key=lambda x:x[0])
+    if not pd_exists:
+        for xy in coll:
+            print '%3.3f, %3.3f' % xy
+    else:
+        df = pd.DataFrame(np.ravel(coll))
+        print df
+        if name is not None:
+           df.to_csv(name)
     return        
 
 def plot_with_peaks(x, y, **kwargs):
@@ -115,7 +115,10 @@ def plot_with_peaks(x, y, **kwargs):
     canvas = newax.figure.canvas
     canvas.mpl_connect('button_press_event',
                        lambda e: onpress_peaknotifier(e,newax,x,y,peak_points))
-    canvas.mpl_connect('key_press_event', print_coll)
+    def _onkey(event):
+        if event.key == 'e':
+           print_coll(peak_points)
+    canvas.mpl_connect('key_press_event', _onkey)
     return peak_points
 
 def loc_max_pos(v):
