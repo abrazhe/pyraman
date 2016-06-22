@@ -95,7 +95,7 @@ def print_coll(coll, name = None):
     except ImportError:
         print "Can't load pandas"
         pd_exists = False
-    coll = sorted([lp.get_xy() for lp in peak_points.values()], key=lambda x:x[0])
+    coll = sorted([lp.get_xy() for lp in coll.values()], key=lambda x:x[0])
     if not pd_exists:
         for xy in coll:
             print '%3.3f, %3.3f' % xy
