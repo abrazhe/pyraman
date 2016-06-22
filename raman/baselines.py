@@ -87,26 +87,28 @@ def onpress_peaknotifier(event, ax, x,y, coll):
     #ax.text(peak_x, peak_y, '%3.3f, %3.3f'%(peak_x, peak_y), size='x-small')
     pl.draw()
         
-
-def plot_with_peaks(x, y, **kwargs):
-    peak_points = {}
-    def print_coll(event):
+        
+def print_coll(coll, name = None):
         try: 
             import pandas as pd
             pd_exists = True
         except ImportError:
             print "Can't load pandas"
             pd_exists = False
-        if event.key == 'e':
-            coll = sorted([lp.get_xy() for lp in peak_points.values()],
-                          key=lambda x:x[0])
-            if not pd_exists:
-                for xy in coll:
-                    print '%3.3f, %3.3f' % xy
-            else:
-                df = pd.DataFrame(np.ravel(coll))
-                print df
-        return
+        coll = sorted([lp.get_xy() for lp in peak_points.values()], key=lambda x:x[0])
+        if not pd_exists:
+            for xy in coll:
+                print '%3.3f, %3.3f' % xy
+        else:
+            df = pd.DataFrame(np.ravel(coll))
+            print df
+            if name is not None:
+               df.to_csv(name)
+    return        
+
+def plot_with_peaks(x, y, **kwargs):
+    peak_points = {}
+    
     newax = pl.figure().add_subplot(111)
     newax.plot(x,y)
     newax.set_title("Click on peaks to select, press 'e' to export selected...")
