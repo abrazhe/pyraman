@@ -95,16 +95,16 @@ def print_coll(coll, name = None):
     except ImportError:
         print "Can't load pandas"
         pd_exists = False
-    coll = sorted([lp.get_xy() for lp in coll.values()], key=lambda x:x[0])
+    out = sorted([lp.get_xy() for lp in coll.values()], key=lambda x:x[0])
     if not pd_exists:
-        for xy in coll:
+        for xy in out:
             print '%3.3f, %3.3f' % xy
     else:
-        df = pd.DataFrame(np.ravel(coll))
-        print df
+        out = pd.DataFrame(out)
         if name is not None:
-           df.to_csv(name)
-    return        
+           out.to_csv(name+'.csv')
+           out.to_excel(name+'.xls')
+    return out
 
 def plot_with_peaks(x, y, **kwargs):
     peak_points = {}
