@@ -87,33 +87,38 @@ def onpress_peaknotifier(event, ax, x,y, coll):
     #ax.text(peak_x, peak_y, '%3.3f, %3.3f'%(peak_x, peak_y), size='x-small')
     pl.draw()
         
+        
+def print_coll(coll, name = None):
+    try: 
+        import pandas as pd
+        pd_exists = True
+    except ImportError:
+        print "Can't load pandas"
+        pd_exists = False
+    out = sorted([lp.get_xy() for lp in coll.values()], key=lambda x:x[0])
+    if not pd_exists:
+        for xy in out:
+            print '%3.3f, %3.3f' % xy
+    else:
+        out = pd.DataFrame(out)
+        if name is not None:
+           out.to_csv(name+'.csv')
+           out.to_excel(name+'.xls')
+    return out
 
 def plot_with_peaks(x, y, **kwargs):
     peak_points = {}
-    def print_coll(event):
-        try: 
-            import pandas as pd
-            pd_exists = True
-        except ImportError:
-            print "Can't load pandas"
-            pd_exists = False
-        if event.key == 'e':
-            coll = sorted([lp.get_xy() for lp in peak_points.values()],
-                          key=lambda x:x[0])
-            if not pd_exists:
-                for xy in coll:
-                    print '%3.3f, %3.3f' % xy
-            else:
-                df = pd.DataFrame(np.ravel(coll))
-                print df
-        return
+    
     newax = pl.figure().add_subplot(111)
     newax.plot(x,y)
     newax.set_title("Click on peaks to select, press 'e' to export selected...")
     canvas = newax.figure.canvas
     canvas.mpl_connect('button_press_event',
                        lambda e: onpress_peaknotifier(e,newax,x,y,peak_points))
-    canvas.mpl_connect('key_press_event', print_coll)
+    def _onkey(event):
+        if event.key == 'e':
+           print_coll(peak_points)
+    canvas.mpl_connect('key_press_event', _onkey)
     return peak_points
 
 def loc_max_pos(v):
