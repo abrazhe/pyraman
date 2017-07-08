@@ -5,7 +5,7 @@ import pylab as pl
 from scipy import stats,ndimage,signal
 bclose, bopen = ndimage.binary_closing, ndimage.binary_opening
 
-#### Raman spectral images are orgaized such as arr[i,j,:] gives a spectrum at
+#### Raman spectral images are organized such as arr[i,j,:] gives a spectrum at
 #### location i,j (i is rows or Y, j is columns or X)
 
 
@@ -30,18 +30,18 @@ def range_imagemap(fn, arr, nu, nurange):
 
 def range_rms(arr, nu, nurange):
     "RMS intensities in the given nu range"
-    def _fn(x) : return pl.rms_flat(x[in_range(nu,nurange)])
+    def _fn(x) : return pl.rms_flat(x[_in_range(nu,nurange)])
     return imagemap(_fn, arr)
     
 
 def range_sum(arr, nu, nurange):
     "Sum intensities in the given nu range"
-    def _fn(x) : return np.sum(x[in_range(nu,nurange)])
+    def _fn(x) : return np.sum(x[_in_range(nu,nurange)])
     return imagemap(_fn, arr)
 
 def range_mean(arr, nu, nurange):
     "Sum intensities in the given nu range"
-    def _fn(x) : return np.mean(x[in_range(nu,nurange)])
+    def _fn(x) : return np.mean(x[_in_range(nu,nurange)])
     return imagemap(_fn, arr)
 
 def adaptive_median_filter(m):
