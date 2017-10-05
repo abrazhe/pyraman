@@ -28,7 +28,7 @@ def load_image(fname):
 
     pre_out = d2[:,:,:,3]
     out = np.zeros((nx,ny,nnu))
-    print pre_out.shape, out.shape
+    print(pre_out.shape, out.shape)
     for j,k in enumerate(knu):
         out[:,:,j] = pre_out[:,:,k].T
     return out, nu[knu], x, y

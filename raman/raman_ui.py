@@ -43,7 +43,7 @@ class _MPLFigureEditor(Editor):
 class MPLFigureEditor(BasicEditorFactory):
     klass = _MPLFigureEditor
 
-from baselines import als
+from .baselines import als
 
 class ALS_traits(HasTraits):
     figure = Instance(Figure, ())
@@ -60,7 +60,7 @@ class ALS_traits(HasTraits):
 	self.nu = nu
 	self.sp = sp
 	self.smoother = smooth
-	print smooth, self.smoother
+	print(smooth, self.smoother)
 	self.p = p
     def _figure_default(self):
 	figure = Figure()
