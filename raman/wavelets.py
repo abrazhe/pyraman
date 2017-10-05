@@ -13,6 +13,7 @@ from scipy.ndimage import convolve1d
 
 import itertools as itt
 
+from numba import jit
 
 _dtype_ = np.float32
 
@@ -78,6 +79,34 @@ def locations(shape):
     """
     return itt.product(*list(map(range, shape)))
 
+@jit
+def conv1d_wholes(vout, v, phi, ind):
+    L,lphi = len(v),len(phi)
+    for l in range(L):
+        vout[l] = 0
+        for k in range(lphi):
+            ki = l + ind[k]
+            if ki < 0 : ki = -ki%L
+            elif ki >= L: ki = L-2-ki%L
+            vout[l] += phi[k]*v[ki]
+
+@jit
+def conv2d_wholes(uout, u, phi, ind):
+    (Nr,Nc),lphi = u.shape,len(phi)
+    for i in range(Nr):
+        for j in range(Nc):
+            uout[i,j] = 0
+            for k in range(lphi):
+                ki = i + ind[k]
+                if ki < 0 : ki = -ki%Nr
+                elif ki >= Nr: ki = Nr-2-ki%Nr
+                for l in range(lphi):
+                    li = j + ind[l]
+                    if li < 0: li = -li%Nc
+                    elif li >=Nc: li = Nc-2-li%Nc
+                    uout[i,j] += phi[k,l]*u[ki,li]
+
+
 #from scipy import weave
 ## def weave_conv1d_wholes(vout,v,phi,ind):
 ##     if vout.shape != v.shape:
@@ -122,7 +151,7 @@ def locations(shape):
 ##     weave.inline(code, ['uout','u','phi', 'ind'])
 
 
-def decompose1d_weave(sig, level,
+def decompose1d_numba(sig, level,
                       phi=_phi_,
                       dtype= 'float64'):
     """
@@ -143,7 +172,7 @@ def decompose1d_weave(sig, level,
     for j in range(level):
         phiind = (2**j)*phirange
         approx = np.zeros(sig.shape, dtype=dtype)
-        weave_conv1d_wholes(approx, cprev, phi, phiind)
+        conv1d_wholes(approx, cprev, phi, phiind)
         coefs[j] = cprev - approx
         cprev = approx
     coefs[j+1] = approx
@@ -155,7 +184,7 @@ def make_phi2d(phi):
     x = phi.reshape(1,-1)
     return np.dot(x.T,x)
 
-def decompose2d_weave(arr2d, level,
+def decompose2d_numba(arr2d, level,
                       phi=_phi_,
                       dtype= 'float64'):
     """
@@ -180,7 +209,7 @@ def decompose2d_weave(arr2d, level,
     for j in range(level):
         phiind = (2**j)*phirange
         approx = np.zeros(sh, dtype=dtype)
-        weave_conv2d_wholes(approx, cprev, phi2d, phiind)
+        conv2d_wholes(approx, cprev, phi2d, phiind)
         coefs[j] = cprev - approx
         cprev = approx
     coefs[j+1] = approx
@@ -212,7 +241,7 @@ def decompose1d_numpy(sig, level, phi=_phi_, boundary='symm'):
     elif level == 1 or L < len(zupsample(phi)): return [w, apprx]
     else: return [w] + decompose1d(apprx, level-1, zupsample(phi))
 
-decompose1d = decompose1d_weave
+decompose1d = decompose1d_numba
 
 def decompose2d_numpy(arr2d, level, phi=None, boundary='symm'):
     """
@@ -299,7 +328,7 @@ def decompose3d_numpy(arr, level=1,
     else:
         return [details] + decompose3d_numpy(approx, level-1, upkern)
 
-def decompose3d_weave(arr, level=1,
+def decompose3d_numba(arr, level=1,
                       phi = _phi_,
                       curr_j = 0):
     """Semi-separable a trous wavelet decomposition for 3D data
@@ -329,22 +358,22 @@ def decompose3d_weave(arr, level=1,
     for loc in locations(arr.shape[1:]):
         v = arr[:,loc[0], loc[1]]
         vo = np.zeros(v.shape, _dtype_)
-        weave_conv1d_wholes(tapprox[:,loc[0], loc[1]], v, phi, phiind)
+        conv1d_wholes(tapprox[:,loc[0], loc[1]], v, phi, phiind)
     approx = np.zeros(arr.shape,_dtype_)
     for k in range(arr.shape[0]):
-        weave_conv2d_wholes(approx[k],tapprox[k], phi2d, phiind)
+        conv2d_wholes(approx[k],tapprox[k], phi2d, phiind)
     details = arr - approx
     if level == 1:
         return [details, approx]
     else:
-        return [details] + decompose3d_weave(approx, level-1, phi, curr_j+1)
+        return [details] + decompose3d_numba(approx, level-1, phi, curr_j+1)
 
 
 
 ### Main dispatcher function
-decompose1d = decompose1d_weave
-decompose2d = decompose2d_weave
-decompose3d = decompose3d_weave    
+decompose1d = decompose1d_numba
+decompose2d = decompose2d_numba
+decompose3d = decompose3d_numba    
 def decompose(arr, *args, **kwargs):
     "Dispatcher on 1D, 2D or 3D data decomposition"
     ndim = arr.ndim

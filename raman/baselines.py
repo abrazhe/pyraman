@@ -3,6 +3,8 @@
 
 import numpy as np
 import pylab as pl
+from functools import reduce
+
 from . import renishaw as rshaw
 
 from scipy.interpolate import splrep, splev
@@ -129,6 +131,8 @@ def loc_max_pos(v):
 
 import pickle
 
+_bands_kw_ = dict(lw=0.5,alpha=0.5,color='r')
+
 class RamanCooker():
     linestyle = 'k-'
     def cook(self, nu, spectrum, mode='spans', **kwargs):
@@ -168,7 +172,7 @@ class RamanCooker():
         self.bands = bands
         self.mode = 'spans'
         if bands:
-            _ = [pl.axvline(band, color='r') for band in bands]
+            _ = [pl.axvline(band, **_bands_kw_) for band in bands]
         self.spl_k= 3
         self.curr_span = None
         self.spankw = {'facecolor':(0.9,0.9,0.9), 'alpha':0.9}
@@ -192,7 +196,7 @@ class RamanCooker():
         if xlocs is not None:
             self.load_knots(xlocs)
         if bands:
-            _ = [pl.axvline(band, color='r') for band in bands]
+            _ = [pl.axvline(band, **_bands_kw_) for band in bands]
         if not self.connected:
             canvas = self.figspl.canvas
             canvas.mpl_connect('button_press_event',self.onpress_knots)
@@ -337,7 +341,7 @@ class RamanCooker():
             if show:
                 self.peak_view = plot_with_peaks(self.nu, out[1])
                 if self.bands:
-                    _ = [pl.axvline(b, color='r') for b in self.bands] 
+                    _ = [pl.axvline(b, **_bands_kw_) for b in self.bands] 
     def process_spans(self, nu, sp, ret = None):
         w = self.get_weights(nu)
         nux,spx = nu[w>0.5], sp[w>0.5]
@@ -382,9 +386,8 @@ class RamanCooker():
         if isinstance(recipe, dict):
             rec = recipe
         elif isinstance(recipe, str):
-            fo = open(recipe,'rb')
-            rec = pickle.load(fo)
-            fo.close()
+            with open(recipe,'rb') as fo:
+                rec = pickle.load(fo)
         else:
             print("[RamanCooker] Can't recognize type of recipe!")
             return
@@ -608,8 +611,8 @@ def fillpeaks(y, lam, hwi, niter, nint):
     z = spsolve(Z,y)
     #Center points
     lims = np.linspace(0,L-1, nint+1)
-    lefts = np.ceil(lims[:-1])
-    rights = np.floor(lims[1:])
+    lefts = np.ceil(lims[:-1]).astype(int)
+    rights = np.floor(lims[1:]).astype(int)
     minip = np.round((lefts+rights)/2)
     xx = np.array([np.min(z[l:r+1]) for l,r in zip(lefts,rights)])
     for k in range(niter):
@@ -617,13 +620,13 @@ def fillpeaks(y, lam, hwi, niter, nint):
         # to the right
         for i in range(1,nint-1):
             l,r = max(i-w0,0), min(i+w0+1, nint)
-            a = np.mean(xx[l:r])
+            a = np.mean(xx[int(l):int(r)])
             xx[i] = min(a,xx[i])
         # to the left
         for i in range(1,nint-1):
             j = nint-i
             l,r = max(j-w0,0), min(j+w0+1, nint)
-            a = np.mean(xx[l:r])
+            a = np.mean(xx[int(l):int(r)])
             xx[j] = min(a, xx[j])
     tck = splrep(minip,xx)
     return splev(np.arange(L),tck)
@@ -648,7 +651,7 @@ def locextr(v, x = None, mode = 1, **kwargs):
    vals = splev(xfit, tck)
    dersign = mode*np.sign(splev(xfit, tck, der=1))
    extrema = dersign[:-1] - dersign[1:] > 1.5
-   return xfit[extrema], vals[extrema]
+   return xfit[:-1][extrema], vals[:-1][extrema]
 
 
 def find_peak(x, band,nhood=6):
