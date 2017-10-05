@@ -3,9 +3,10 @@
 
 import numpy as np
 import pylab as pl
-import renishaw as rshaw
+from . import renishaw as rshaw
 
 from scipy.interpolate import splrep, splev
+from functools import reduce
 #from scipy.optimize import leastsq
 
 def unique_tag(tags, max_tries = 1e4):
@@ -52,20 +53,19 @@ def any_obj_contains(objects, event):
     if len(objects) < 1 : return False
     return reduce(lambda x,y: x or y,
                   [o.obj.contains(event)[0]
-                   for o in objects.values()])
+                   for o in list(objects.values())])
 
 
 
 
 def bspline_denoise(sig, phi = np.array([1./16, 1./4, 3./8, 1./4, 1./16])):
     def _mirrorpd(k, L):
-	if 0 <= k < L : return k
-	else: return -(k+1)%L
+        if 0 <= k < L : return k
+        else: return -(k+1)%L
     L = len(sig) 
     padlen = len(phi)
     assert L > padlen
-    indices = map(lambda i: _mirrorpd(i, L),
-                  range(-padlen, 0) + range(0,L) + range(L, L+padlen))
+    indices = [_mirrorpd(i, L) for i in list(range(-padlen, 0)) + list(range(0,L)) + list(range(L, L+padlen))]
     padded_sig = sig[indices]
     apprx = np.convolve(padded_sig, phi, mode='same')[padlen:padlen+L]
     return apprx
@@ -81,7 +81,7 @@ def onpress_peaknotifier(event, ax, x,y, coll):
     j = np.argmin(abs(max_pos - ex))
     peak_x, peak_y = max_pos[j], max_vals[j]
     #print ' '.join(['%3.3f'%v for v in (x, y, peak_x, peak_y)])
-    label = unique_tag(coll.keys())
+    label = unique_tag(list(coll.keys()))
     lp =ax.plot(peak_x, peak_y, 'ro', alpha=0.5, label=label)[0]
     coll[label] = LabeledPoint(lp, coll)
     #ax.text(peak_x, peak_y, '%3.3f, %3.3f'%(peak_x, peak_y), size='x-small')
@@ -93,12 +93,12 @@ def print_coll(coll, name = None):
         import pandas as pd
         pd_exists = True
     except ImportError:
-        print "Can't load pandas"
+        print("Can't load pandas")
         pd_exists = False
-    out = sorted([lp.get_xy() for lp in coll.values()], key=lambda x:x[0])
+    out = sorted([lp.get_xy() for lp in list(coll.values())], key=lambda x:x[0])
     if not pd_exists:
         for xy in out:
-            print '%3.3f, %3.3f' % xy
+            print('%3.3f, %3.3f' % xy)
     else:
         out = pd.DataFrame(out)
         if name is not None:
@@ -122,8 +122,8 @@ def plot_with_peaks(x, y, **kwargs):
     return peak_points
 
 def loc_max_pos(v):
-    print len(v)
-    return [i for i in xrange(1,len(v)-1)
+    print(len(v))
+    return [i for i in range(1,len(v)-1)
             if (v[i] >= v[i-1]) and (v[i] > v[i+1])]
 
 
@@ -137,7 +137,7 @@ class RamanCooker():
         elif mode == 'knots':
             self.cook_knots(nu, spectrum, **kwargs)
         else:
-            print "Unknown mode: ", mode
+            print("Unknown mode: ", mode)
     def shared_setup(self, nu, spectrum):
         self.connected = False
         L = min(len(nu), len(spectrum))
@@ -166,7 +166,7 @@ class RamanCooker():
         self.shared_setup(nu, spectrum)
         self.spans = {}
         self.bands = bands
-	self.mode = 'spans'
+        self.mode = 'spans'
         if bands:
             _ = [pl.axvline(band, color='r') for band in bands]
         self.spl_k= 3
@@ -188,9 +188,9 @@ class RamanCooker():
         self.bands = bands
         self.nuspan = nuspan
         self.knots = {}
-	self.mode = 'knots'
-	if xlocs is not None:
-	    self.load_knots(xlocs)
+        self.mode = 'knots'
+        if xlocs is not None:
+            self.load_knots(xlocs)
         if bands:
             _ = [pl.axvline(band, color='r') for band in bands]
         if not self.connected:
@@ -201,16 +201,16 @@ class RamanCooker():
         return self.axspl
 
     def cook_als(self, nu, spectrum, lam = None, p = None):
-	if lam is None:
-	    lam = len(spectrum)**2
-	if p is None:
-	    p = 0.1
-	self.shared_setup(nu, spectrum)
-	baseline = als(spectrum, lam, p)
-	self.plfit.set_data(nu, baseline)
-	return self.axspl
-	
-		
+        if lam is None:
+            lam = len(spectrum)**2
+        if p is None:
+            p = 0.1
+        self.shared_setup(nu, spectrum)
+        baseline = als(spectrum, lam, p)
+        self.plfit.set_data(nu, baseline)
+        return self.axspl
+        
+                
  
     def update_smooth_hint(self,renewp=False):
         if (not hasattr(self, 'smooth_hint')) or renewp:
@@ -287,13 +287,14 @@ class RamanCooker():
         self.curr_span = None
         self.apply_recipe()
 
-    def addspan(self, (x1,x2)):
-        label = unique_tag(self.spans.keys())
+    def addspan(self, xxx_todo_changeme):
+        (x1,x2) = xxx_todo_changeme
+        label = unique_tag(list(self.spans.keys()))
         spanh = pl.axvspan(x1,x2,**self.spankw)
         spanh.set_label(label)
         return spanh
     def addknot(self, x):
-        label = unique_tag(self.knots.keys())
+        label = unique_tag(list(self.knots.keys()))
         nux = in_range(self.nu, (x-self.nuspan, x+self.nuspan))
         if np.any(nux):
             y = np.mean(self.sp[nux]) # todo: use median as an option
@@ -305,15 +306,15 @@ class RamanCooker():
 
     def get_weights(self, nu):
         weights = np.ones(len(nu))
-        mask_regs = [s.xspan() for s in self.spans.values()]
+        mask_regs = [s.xspan() for s in list(self.spans.values())]
         if len(mask_regs) > 0:
             masked = reduce(lambda a,b:a+b,
-                            map(lambda x: in_range(nu,x), mask_regs))
+                            [in_range(nu,x) for x in mask_regs])
             weights -= masked*(1-1e-6)
         return weights
    
     def knots2pars(self, nu = None, sp = None):
-        xlocs = sorted([k.get_xloc() for k in self.knots.values()])
+        xlocs = sorted([k.get_xloc() for k in list(self.knots.values())])
         if nu is None : nu = self.nu
         if sp is None : sp = self.sp
         nuxs = [in_range(nu, (x-self.nuspan, x + self.nuspan)) for x in xlocs]
@@ -328,7 +329,7 @@ class RamanCooker():
             smooth_hint = False
             process = self.process_knots
         else:
-            print "[RamanCooker] applying recipe: unknown mode"
+            print("[RamanCooker] applying recipe: unknown mode")
             return
         out = process(self.nu, self.sp, 'full')
         if out:
@@ -372,9 +373,9 @@ class RamanCooker():
             rec = {'nuspan': self.nuspan,
                    'xlocs': self.export_knots()}
         else:
-            print "[RamanCooker] unknown mode: ", self.mode
+            print("[RamanCooker] unknown mode: ", self.mode)
         if isinstance(out, str):
-            fo = file(out, 'w')
+            fo = open(out, 'wb')
             pickle.dump(rec, fo)
             fo.close()
         return rec
@@ -382,15 +383,15 @@ class RamanCooker():
         if isinstance(recipe, dict):
             rec = recipe
         elif isinstance(recipe, str):
-            fo = file(recipe,'r')
+            fo = open(recipe,'rb')
             rec = pickle.load(fo)
             fo.close()
         else:
-            print "[RamanCooker] Can't recognize type of recipe!"
+            print("[RamanCooker] Can't recognize type of recipe!")
             return
         if mode is None:
             if not hasattr(self, 'mode'):
-                print "[RamanCooker] Can't determine mode"
+                print("[RamanCooker] Can't determine mode")
                 return
             mode = self.mode
         else:
@@ -405,9 +406,9 @@ class RamanCooker():
         
         
     def export_xspans(self):
-        return [s.xspan() for s in self.spans.values()]
+        return [s.xspan() for s in list(self.spans.values())]
     def export_knots(self):
-        return sorted([k.get_xloc() for k in self.knots.values()])
+        return sorted([k.get_xloc() for k in list(self.knots.values())])
     def load_spans(self, xspans):
         for xsp in xspans:
             newspan = self.addspan(xsp)
@@ -465,8 +466,8 @@ class DraggableObj(object):
     def on_type(self, event): pass
     def on_press(self, event): pass
     def disconnect(self):
-        map(self.obj.axes.figure.canvas.mpl_disconnect,
-            self.cid.values())
+        for v in self.cid.values():
+            self.obj.axes.figure.canvas.mpl_disconnect(v)
     def get_color(self):
         return self.obj.get_facecolor()
 
@@ -515,7 +516,8 @@ class DraggablePoint(DraggableObj):
         self.obj.set_data(x0+dx, y0+dy)
         self.redraw()
 
-    def set_xy(self,(x,y)):
+    def set_xy(self, xxx_todo_changeme1):
+        (x,y) = xxx_todo_changeme1
         self.obj.set_data([x],[y])
         self.redraw()
         
@@ -576,16 +578,16 @@ def als(y, lam, p, niter=20, tol=1e-5):
     D = sparse.csc_matrix(np.diff(np.eye(L),2))
     w = np.ones(L)
     zprev = None
-    for i in xrange(niter):
-	W = sparse.spdiags(w, 0, L, L)
-	Z = W + lam*D.dot(D.T)
-	z = spsolve(Z,w*y)
-	w = p*(y>z) + (1-p)*(y<=z)
-	if zprev is not None:
-	    err = np.sum((z-zprev)**2)
-	    if err < tol:
-		return z
-	zprev = z
+    for i in range(niter):
+        W = sparse.spdiags(w, 0, L, L)
+        Z = W + lam*D.dot(D.T)
+        z = spsolve(Z,w*y)
+        w = p*(y>z) + (1-p)*(y<=z)
+        if zprev is not None:
+            err = np.sum((z-zprev)**2)
+            if err < tol:
+                return z
+        zprev = z
     return z
 
 def fillpeaks(y, lam, hwi, niter, nint):
@@ -596,12 +598,12 @@ def fillpeaks(y, lam, hwi, niter, nint):
     ww = np.ones(L)
     # make decreasing windows:
     if niter > 1:
-	d1 = np.log10(hwi)
-	d2 = 0.0
-	_x = np.arange(0,niter-1)*(d2-d1)/(np.floor(niter)-1)
-	w = np.ceil(10**(np.concatenate((d1+_x, [d2]))))
+        d1 = np.log10(hwi)
+        d2 = 0.0
+        _x = np.arange(0,niter-1)*(d2-d1)/(np.floor(niter)-1)
+        w = np.ceil(10**(np.concatenate((d1+_x, [d2]))))
     else:
-	w = [hwi]
+        w = [hwi]
     # Primary smoothing
     W = sparse.spdiags(ww, 0, L, L)
     Z = W + lam*D.dot(D.T)
@@ -613,25 +615,25 @@ def fillpeaks(y, lam, hwi, niter, nint):
     minip = np.round((lefts+rights)/2)
     xx = np.array([np.min(z[l:r+1]) for l,r in zip(lefts,rights)])
     for k in range(niter):
-	w0 = w[k]
-	# to the right
-	for i in range(1,nint-1):
-	    l,r = max(i-w0,0), min(i+w0+1, nint)
-	    a = np.mean(xx[l:r])
-	    xx[i] = min(a,xx[i])
-	# to the left
-	for i in range(1,nint-1):
-	    j = nint-i
-	    l,r = max(j-w0,0), min(j+w0+1, nint)
-	    a = np.mean(xx[l:r])
-	    xx[j] = min(a, xx[j])
+        w0 = w[k]
+        # to the right
+        for i in range(1,nint-1):
+            l,r = max(i-w0,0), min(i+w0+1, nint)
+            a = np.mean(xx[l:r])
+            xx[i] = min(a,xx[i])
+        # to the left
+        for i in range(1,nint-1):
+            j = nint-i
+            l,r = max(j-w0,0), min(j+w0+1, nint)
+            a = np.mean(xx[l:r])
+            xx[j] = min(a, xx[j])
     tck = splrep(minip,xx)
     return splev(np.arange(L),tck)
-	
+        
     
     
 def aws(v, **kwargs):
-    import wavelets
+    from . import wavelets
     z = wavelets.asymmetric_smooth(v,verbose=True,**kwargs)
     return z
 
@@ -657,12 +659,12 @@ def find_peak(x, band,nhood=6):
     spectrum to location of the highest peak in the nhood of band
     """
     def _(y):
-	yn = y/np.std(y)
-	peaks = [lm for lm in zip(*locextr(bspline_denoise(y),x))
-		 if np.abs(lm[0]-band) <=nhood]
-	if len(peaks):
-	    loc, amp = peaks[np.argmax([p[1] for p in peaks])]
-	else:
-	    loc, amp = -1,-1
-	return np.array((loc,amp))
+        yn = y/np.std(y)
+        peaks = [lm for lm in zip(*locextr(bspline_denoise(y),x))
+                 if np.abs(lm[0]-band) <=nhood]
+        if len(peaks):
+            loc, amp = peaks[np.argmax([p[1] for p in peaks])]
+        else:
+            loc, amp = -1,-1
+        return np.array((loc,amp))
     return _

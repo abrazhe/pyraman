@@ -3,6 +3,7 @@ import numpy as np
 import pylab as pl
 
 from scipy import stats,ndimage,signal
+from functools import reduce
 bclose, bopen = ndimage.binary_closing, ndimage.binary_opening
 
 #### Raman spectral images are organized such as arr[i,j,:] gives a spectrum at
@@ -15,8 +16,8 @@ def process_image(arr, fn):
     new_shape= figsh + fn(arr[0,0]).shape
     out = np.zeros(new_shape)
     nrow,ncol = figsh
-    for r in xrange(nrow):
-        for c in xrange(ncol):
+    for r in range(nrow):
+        for c in range(ncol):
             out[r,c] = fn(arr[r,c])
     return out
 
@@ -70,13 +71,13 @@ def peak_ratio(arr, nu, nuint_n, nuint_d, fn = range_mean, filt_output=True):
     mask = bopen(bclose(mask_n * mask_d))
     out = mask*(nominator/denominator)
     if filt_output:
-	out = adaptive_median_filter(out)
+        out = adaptive_median_filter(out)
     return out
 
 def peak_ratio2(arr, nu, nuint_n, nuint_d, fn = range_mean,
-		mask = None,
+                mask = None,
                 filt_output = True,
-		as_masked_array = False,
+                as_masked_array = False,
                 baseline_region = (1750,2000)):
     nominator = fn(arr, nu, nuint_n)
     denominator = fn(arr, nu, nuint_d)
@@ -85,15 +86,15 @@ def peak_ratio2(arr, nu, nuint_n, nuint_d, fn = range_mean,
     x = fn(arr, nu, baseline_region)
     th_fn = x.mean() + 5.0*x.std()
     if mask is None:
-	mask_n = (range_rms(arr,nu, nuint_n) > th_rms)*(nominator > th_fn)
-	mask_d = (range_rms(arr,nu, nuint_d) > th_rms)*(denominator >th_fn)
-	mask = mask_n*mask_d
+        mask_n = (range_rms(arr,nu, nuint_n) > th_rms)*(nominator > th_fn)
+        mask_d = (range_rms(arr,nu, nuint_d) > th_rms)*(denominator >th_fn)
+        mask = mask_n*mask_d
     mask = mask*(denominator > th_fn)*(nominator > th_fn)
     out = mask*(nominator/denominator)
     if filt_output:
         out = adaptive_median_filter(out)
     if as_masked_array:
-	out = np.ma.masked_where(out <=0, out)
+        out = np.ma.masked_where(out <=0, out)
     return out
 
 
@@ -157,7 +158,7 @@ def _in_range(vec, range):
 def _neighbours_x(loc):
     n = len(loc)
     d = np.diag(np.ones(n))
-    return map(tuple, np.concatenate((d,-d)) + loc)
+    return list(map(tuple, np.concatenate((d,-d)) + loc))
 
 
 def _valid_loc(loc,shape):
