@@ -135,6 +135,7 @@ def inspect_image(arr, nu,
             xh = ax1.axhline(event.ydata)
             yh = ax1.axvline(event.xdata)
             hoverp[1] = (xh, yh)
+            print(int(round(event.ydata)), int(round(event.xdata)))
             fh.canvas.draw()
         else:
             xh,yh = hoverp[1]

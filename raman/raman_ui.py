@@ -50,36 +50,36 @@ class ALS_traits(HasTraits):
     smoother = Float()
     p = Float()
     view = View(VGroup(Item('figure', editor=MPLFigureEditor(),
-			    show_label=False),
-		       HGroup(Item('smoother'), Item('p'))),
-		width=800,
-		height=500,
-		title = 'Baseline with ALS',
-		resizable=True)
+                            show_label=False),
+                       HGroup(Item('smoother'), Item('p'))),
+                width=800,
+                height=500,
+                title = 'Baseline with ALS',
+                resizable=True)
     def __init__(self, nu, sp,smooth=2.0, p=0.01):
-	self.nu = nu
-	self.sp = sp
-	self.smoother = smooth
-	print(smooth, self.smoother)
-	self.p = p
+        self.nu = nu
+        self.sp = sp
+        self.smoother = smooth
+        print (smooth, self.smoother)
+        self.p = p
     def _figure_default(self):
-	figure = Figure()
-	self.axes = figure.add_subplot(111)
-	self.axes.set_title('ALS baseline coorection')
-	self._update_baseline()
-	self.pl1 = self.axes.plot(self.nu, self.sp)
-	self.pl2 = self.axes.plot(self.nu,self.baseline, 'm--')[0]
-	return figure
+        figure = Figure()
+        self.axes = figure.add_subplot(111)
+        self.axes.set_title('ALS baseline coorection')
+        self._update_baseline()
+        self.pl1 = self.axes.plot(self.nu, self.sp)
+        self.pl2 = self.axes.plot(self.nu,self.baseline, 'm--')[0]
+        return figure
     def _update_baseline(self):
-	self.baseline = als(self.sp, 10**self.smoother, self.p)
-	if hasattr(self, 'pl2'):
-	    self.pl2.set_data(self.nu,self.baseline)
-	    self.figure.canvas.draw()
+        self.baseline = als(self.sp, 10**self.smoother, self.p)
+        if hasattr(self, 'pl2'):
+            self.pl2.set_data(self.nu,self.baseline)
+            self.figure.canvas.draw()
     def _p_changed(self):
-	self._update_baseline()
+        self._update_baseline()
     def _smoother_changed(self):
-	self._update_baseline()
+        self._update_baseline()
 
-	
+        
 def main(nu, sp):
     Raman_als(nu,sp).configure_traits()

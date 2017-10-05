@@ -79,47 +79,47 @@ def locations(shape):
     return itt.product(*list(map(range, shape)))
 
 #from scipy import weave
-def weave_conv1d_wholes(vout,v,phi,ind):
-    if vout.shape != v.shape:
-        raise ValueError("Input and output arrays must have the same shape")
-    code = """
-    long L,i,k,ki;
-    L = Nv[0];
-    for(i=0; i<L; i++){
-       VOUT1(i) = 0;
-       for(k=0; k<Nphi[0]; k++){
-          ki = i+IND1(k);
-          if (ki < 0){ki = -ki%L;}
-          else if (ki >= L){ki = L-2-ki%L;}
-          VOUT1(i) += PHI1(k)*V1(ki);
-       }
-    }
-    """
-    weave.inline(code, ['vout','v','phi', 'ind'])
+## def weave_conv1d_wholes(vout,v,phi,ind):
+##     if vout.shape != v.shape:
+##         raise ValueError("Input and output arrays must have the same shape")
+##     code = """
+##     long L,i,k,ki;
+##     L = Nv[0];
+##     for(i=0; i<L; i++){
+##        VOUT1(i) = 0;
+##        for(k=0; k<Nphi[0]; k++){
+##           ki = i+IND1(k);
+##           if (ki < 0){ki = -ki%L;}
+##           else if (ki >= L){ki = L-2-ki%L;}
+##           VOUT1(i) += PHI1(k)*V1(ki);
+##        }
+##     }
+##     """
+##     weave.inline(code, ['vout','v','phi', 'ind'])
 
-def weave_conv2d_wholes(uout,u,phi,ind):
-    code = """
-    long Nr,Nc,i,j,k,ki,l,li;
-    Nr = Nu[0];
-    Nc = Nu[1];
-    for(i=0; i<Nr; i++){
-       for(j=0; j<Nc; j++){
-          UOUT2(i,j) = 0;
-          for(k=0; k<Nphi[0]; k++){
-             ki = i+IND1(k);
-             if (ki < 0){ki = -ki%Nr;}
-             else if (ki >= Nr){ki = Nr-2-ki%Nr;}
-             for(l=0; l<Nphi[1]; l++){
-                li = j + IND1(l);
-                if (li < 0){li = -li%Nc;}
-                else if (li >= Nc){li = Nc-2-li%Nc;}
-                UOUT2(i,j) += PHI2(k,l)*U2(ki,li);
-             }
-          }
-       }
-    }
-    """
-    weave.inline(code, ['uout','u','phi', 'ind'])
+## def weave_conv2d_wholes(uout,u,phi,ind):
+##     code = """
+##     long Nr,Nc,i,j,k,ki,l,li;
+##     Nr = Nu[0];
+##     Nc = Nu[1];
+##     for(i=0; i<Nr; i++){
+##        for(j=0; j<Nc; j++){
+##           UOUT2(i,j) = 0;
+##           for(k=0; k<Nphi[0]; k++){
+##              ki = i+IND1(k);
+##              if (ki < 0){ki = -ki%Nr;}
+##              else if (ki >= Nr){ki = Nr-2-ki%Nr;}
+##              for(l=0; l<Nphi[1]; l++){
+##                 li = j + IND1(l);
+##                 if (li < 0){li = -li%Nc;}
+##                 else if (li >= Nc){li = Nc-2-li%Nc;}
+##                 UOUT2(i,j) += PHI2(k,l)*U2(ki,li);
+##              }
+##           }
+##        }
+##     }
+##     """
+##     weave.inline(code, ['uout','u','phi', 'ind'])
 
 
 def decompose1d_weave(sig, level,
@@ -606,4 +606,5 @@ def asymmetric_smooth(v, level=5, niter=100, tol = 1e-6, r=1.0,verbose=False):
                 break
         sprev = s
     return s
+
 

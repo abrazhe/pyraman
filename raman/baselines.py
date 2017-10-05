@@ -6,7 +6,6 @@ import pylab as pl
 from . import renishaw as rshaw
 
 from scipy.interpolate import splrep, splev
-from functools import reduce
 #from scipy.optimize import leastsq
 
 def unique_tag(tags, max_tries = 1e4):
@@ -53,7 +52,7 @@ def any_obj_contains(objects, event):
     if len(objects) < 1 : return False
     return reduce(lambda x,y: x or y,
                   [o.obj.contains(event)[0]
-                   for o in list(objects.values())])
+                   for o in objects.values()])
 
 
 
@@ -65,7 +64,8 @@ def bspline_denoise(sig, phi = np.array([1./16, 1./4, 3./8, 1./4, 1./16])):
     L = len(sig) 
     padlen = len(phi)
     assert L > padlen
-    indices = [_mirrorpd(i, L) for i in list(range(-padlen, 0)) + list(range(0,L)) + list(range(L, L+padlen))]
+    indices = list(map(lambda i: _mirrorpd(i, L),
+                  range(-padlen, 0) + range(0,L) + range(L, L+padlen)))
     padded_sig = sig[indices]
     apprx = np.convolve(padded_sig, phi, mode='same')[padlen:padlen+L]
     return apprx
@@ -95,7 +95,7 @@ def print_coll(coll, name = None):
     except ImportError:
         print("Can't load pandas")
         pd_exists = False
-    out = sorted([lp.get_xy() for lp in list(coll.values())], key=lambda x:x[0])
+    out = sorted([lp.get_xy() for lp in coll.values()], key=lambda x:x[0])
     if not pd_exists:
         for xy in out:
             print('%3.3f, %3.3f' % xy)
@@ -242,7 +242,7 @@ class RamanCooker():
         elif event.button is 3:
             self.pressed = event.xdata,event.ydata
             x0 = event.xdata
-            self.curr_span = self.addspan((x0,x0))
+            self.curr_span = self.addspan(x0,x0)
             self.axspl.axis(axrange)
             pass
         elif event.button is 'up':
@@ -271,7 +271,7 @@ class RamanCooker():
         x0 = self.pressed[0]
         x = event.xdata
         if self.curr_span:
-            self.curr_span.set_xy([[x0,0], [x0,1], [x,1], [x,0], [x0,0]])
+            self.curr_span.set_xy([x0,0], [x0,1], [x,1], [x,0], [x0,0])
         self.redraw()
 
     def onrelease_spans(self,event):
@@ -287,9 +287,8 @@ class RamanCooker():
         self.curr_span = None
         self.apply_recipe()
 
-    def addspan(self, xxx_todo_changeme):
-        (x1,x2) = xxx_todo_changeme
-        label = unique_tag(list(self.spans.keys()))
+    def addspan(self, x1,x2):
+        label = unique_tag(self.spans.keys())
         spanh = pl.axvspan(x1,x2,**self.spankw)
         spanh.set_label(label)
         return spanh
@@ -306,7 +305,7 @@ class RamanCooker():
 
     def get_weights(self, nu):
         weights = np.ones(len(nu))
-        mask_regs = [s.xspan() for s in list(self.spans.values())]
+        mask_regs = [s.xspan() for s in self.spans.values()]
         if len(mask_regs) > 0:
             masked = reduce(lambda a,b:a+b,
                             [in_range(nu,x) for x in mask_regs])
@@ -314,7 +313,7 @@ class RamanCooker():
         return weights
    
     def knots2pars(self, nu = None, sp = None):
-        xlocs = sorted([k.get_xloc() for k in list(self.knots.values())])
+        xlocs = sorted([k.get_xloc() for k in self.knots.values()])
         if nu is None : nu = self.nu
         if sp is None : sp = self.sp
         nuxs = [in_range(nu, (x-self.nuspan, x + self.nuspan)) for x in xlocs]
@@ -406,12 +405,12 @@ class RamanCooker():
         
         
     def export_xspans(self):
-        return [s.xspan() for s in list(self.spans.values())]
+        return [s.xspan() for s in self.spans.values()]
     def export_knots(self):
-        return sorted([k.get_xloc() for k in list(self.knots.values())])
+        return sorted([k.get_xloc() for k in self.knots.values()])
     def load_spans(self, xspans):
         for xsp in xspans:
-            newspan = self.addspan(xsp)
+            newspan = self.addspan(*xsp)
             label = newspan.get_label()
             self.spans[label] = Span(newspan, self.spans)
         self.apply_recipe()
@@ -516,8 +515,7 @@ class DraggablePoint(DraggableObj):
         self.obj.set_data(x0+dx, y0+dy)
         self.redraw()
 
-    def set_xy(self, xxx_todo_changeme1):
-        (x,y) = xxx_todo_changeme1
+    def set_xy(self,x,y):
         self.obj.set_data([x],[y])
         self.redraw()
         
