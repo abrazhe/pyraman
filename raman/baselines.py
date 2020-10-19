@@ -241,17 +241,17 @@ class RamanCooker():
         if event.inaxes != self.axspl or tb.mode != '': return
         x,y = event.xdata, event.ydata
         axrange = self.axspl.get_xbound() + self.axspl.get_ybound()
-        if event.button is 1 :
+        if event.button == 1 :
             pass
-        elif event.button is 3:
+        elif event.button == 3:
             self.pressed = event.xdata,event.ydata
             x0 = event.xdata
             self.curr_span = self.addspan(x0,x0)
             self.axspl.axis(axrange)
             pass
-        elif event.button is 'up':
+        elif event.button == 'up':
             self.spl_smooth *= 1.1
-        elif event.button is 'down':
+        elif event.button == 'down':
             self.spl_smooth /= 1.1
         self.apply_recipe()
         self.axspl.axis(axrange)
@@ -262,7 +262,7 @@ class RamanCooker():
         if any_obj_contains(self.knots, event) : return
         x,y = event.xdata, event.ydata
         axrange = self.axspl.get_xbound() + self.axspl.get_ybound()
-        if event.button is 1:
+        if event.button == 1:
             kp = self.addknot(event.xdata)
             self.knots[kp.tag] = kp
         self.apply_recipe()
@@ -477,13 +477,13 @@ class Span(DraggableObj):
     def on_press(self, event):
         if not self.event_ok(event, True): return
         #x0,y0 = self.obj.get_xdata(), self.obj.get_ydata()
-        if event.button is 1:
+        if event.button == 1:
             pass
         #    self.pressed = event.xdata, event.ydata, x0, y0
-        elif event.button is 2:
+        elif event.button == 2:
             pass
           
-        elif event.button is 3:
+        elif event.button == 3:
             p = self.coll.pop(self.tag)
             self.obj.remove()
             self.disconnect()
@@ -499,11 +499,11 @@ class DraggablePoint(DraggableObj):
     def on_press(self, event):
         if not self.event_ok(event, True): return
         x0,y0 = self.obj.get_xdata(), self.obj.get_ydata()
-        if event.button is 1:
+        if event.button == 1:
             self.pressed = event.xdata, event.ydata, x0, y0
-        elif event.button is 2:
+        elif event.button == 2:
             pass
-        elif event.button is 3:
+        elif event.button == 3:
             p = self.coll.pop(self.tag)
             self.obj.remove()
             self.disconnect()
@@ -556,7 +556,7 @@ class LabeledPoint(DraggablePoint):
         self.textlabel = obj.axes.text(x,y,"%3.3f, %3.3f"%(x,y))
     def on_press(self,event):
         DraggablePoint.on_press(self,event)
-        if self.event_ok(event, True) and event.button is 3:
+        if self.event_ok(event, True) and event.button == 3:
             self.textlabel.remove()
 
     def redraw(self):
