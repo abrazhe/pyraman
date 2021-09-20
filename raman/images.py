@@ -29,9 +29,12 @@ def range_imagemap(fn, arr, nu, nurange):
     return imagemap(lambda x: fn(x[_in_range(nu,nurange)]))
 
 
+def my_rms_flat(x):
+    return np.nanmean(np.ravel(x)**2)**0.5
+
 def range_rms(arr, nu, nurange):
     "RMS intensities in the given nu range"
-    def _fn(x) : return pl.rms_flat(x[_in_range(nu,nurange)])
+    def _fn(x) : return my_rms_flat(x[_in_range(nu,nurange)])
     return imagemap(_fn, arr)
     
 
